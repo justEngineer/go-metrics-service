@@ -156,6 +156,7 @@ func mainPage(storage *storage.MemStorage) http.HandlerFunc {
 
 func main() {
 	config := GetServerConfig()
+
 	var MetricStorage storage.MemStorage
 	MetricStorage.Gauge = make(map[string]float64)
 	MetricStorage.Counter = make(map[string]int64)
