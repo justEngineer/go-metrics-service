@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	storage "github.com/justEngineer/go-metrics-service/internal"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,6 +95,18 @@ func TestUpdateMetric(t *testing.T) {
 		t.Run(tc.method, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.url, nil)
 			w := httptest.NewRecorder()
+
+			urlPart := strings.Split(r.URL.Path, "/")
+			idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "update" })
+			typeIdx := idx + 1
+			nameIdx := idx + 2
+			valueIdx := idx + 3
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("type", urlPart[typeIdx])
+			rctx.URLParams.Add("name", urlPart[nameIdx])
+			rctx.URLParams.Add("value", urlPart[valueIdx])
+
+			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			var MetricStorage storage.MemStorage
 			MetricStorage.Gauge = make(map[string]float64)
