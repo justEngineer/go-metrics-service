@@ -50,11 +50,10 @@ func getMetrics() {
 	MetricStorage.counter["PollCount"] += 1
 }
 
-func sendMetrics() {
-	endpoint := "http://localhost:8080/"
+func sendMetrics(config *ClientConfig) {
 	client := &http.Client{}
 	for k, v := range MetricStorage.gauge {
-		url := endpoint + "update/gauge/" + k + "/" + strconv.FormatFloat(v, 'f', -1, 64)
+		url := "http://" + config.endpoint + "/update/gauge/" + k + "/" + strconv.FormatFloat(v, 'f', -1, 64)
 		request, err := http.NewRequest(http.MethodPost, url, nil)
 		if err != nil {
 			panic(err)
@@ -67,7 +66,7 @@ func sendMetrics() {
 		defer response.Body.Close()
 	}
 	for k, v := range MetricStorage.counter {
-		url := endpoint + "update/counter/" + k + "/" + strconv.FormatInt(v, 10)
+		url := config.endpoint + "update/counter/" + k + "/" + strconv.FormatInt(v, 10)
 		request, err := http.NewRequest(http.MethodPost, url, nil)
 		if err != nil {
 			panic(err)
@@ -81,21 +80,28 @@ func sendMetrics() {
 	}
 }
 
-func onTimer(timeoutSec *int) {
-	getMetrics()
-	*timeoutSec += 2
-	if *timeoutSec == 10 {
-		sendMetrics()
-		*timeoutSec = 0
+func onTimer(sendTimeoutSec *int, pollTimeoutSec *int, config *ClientConfig) {
+	*sendTimeoutSec += 1
+	*pollTimeoutSec += 1
+	if *pollTimeoutSec == int(config.pollInterval) {
+		getMetrics()
+		*pollTimeoutSec = 0
+	}
+	if *sendTimeoutSec == int(config.reportInterval) {
+		sendMetrics(config)
+		*sendTimeoutSec = 0
 	}
 }
 
 func main() {
+	config := GetClientConfig()
+
 	MetricStorage.gauge = make(map[string]float64)
 	MetricStorage.counter = make(map[string]int64)
 	sendMetricsTimeout := 0
+	pollMetricsTimeout := 0
 	for {
-		onTimer(&sendMetricsTimeout)
-		time.Sleep(2 * time.Second)
+		onTimer(&sendMetricsTimeout, &pollMetricsTimeout, &config)
+		time.Sleep(time.Second)
 	}
 }

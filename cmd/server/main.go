@@ -20,19 +20,12 @@ func GetMetric(storage *storage.MemStorage) http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		// if r.Header.Get("Content-Type") != "text/plain" {
-		// 	http.Error(w, "Content-Type must be text/plain", http.StatusBadRequest)
-		// 	return
-		// }
 		urlPart := strings.Split(r.URL.Path, "/")
 		idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "value" })
-		//log.Println(strconv.Itoa(len(urlPart) - idx))
 		if len(urlPart)-idx < 3 {
 			http.Error(w, "URL is too short", http.StatusNotFound)
 			return
 		}
-		// typeIdx := idx + 1
-		// nameIdx := idx + 2
 		valueType := chi.URLParam(r, "type")
 		name := chi.URLParam(r, "name")
 		var body string
@@ -69,20 +62,12 @@ func UpdateMetric(storage *storage.MemStorage) http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		// if r.Header.Get("Content-Type") != "text/plain" {
-		// 	http.Error(w, "Content-Type must be text/plain", http.StatusBadRequest)
-		// 	return
-		// }
 		urlPart := strings.Split(r.URL.Path, "/")
 		idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "update" })
-		//log.Println(strconv.Itoa(len(urlPart) - idx))
 		if len(urlPart)-idx < 4 {
 			http.Error(w, "URL is too short", http.StatusNotFound)
 			return
 		}
-		// typeIdx := idx + 1
-		// nameIdx := idx + 2
-		// valueIdx := idx + 3
 		valueType := chi.URLParam(r, "type")
 		name := chi.URLParam(r, "name")
 		valueStr := chi.URLParam(r, "value")
@@ -109,26 +94,11 @@ func UpdateMetric(storage *storage.MemStorage) http.HandlerFunc {
 		// устанавливаем заголовок Content-Type
 		// для передачи клиенту информации, кодированной в JSON
 		w.Header().Set("Content-Type", "text/plain")
-		//w.Header().Set("Content-Length", strconv.Itoa(len(r.URL.Path)))
 		// устанавливаем код 200
 		w.WriteHeader(http.StatusOK)
-		// пишем тело ответа
-		//w.Write([]byte("Hello"))
+
 	}
 }
-
-const form = `<html>
-    <head>
-    <title></title>
-    </head>
-    <body>
-        <form action="/" method="post">
-            <label>Логин <input type="text" name="login"></label>
-            <label>Пароль <input type="password" name="password"></label>
-            <input type="submit" value="Login">
-        </form>
-    </body>
-</html>`
 
 const metricList = `<table>
     <thead>
@@ -158,7 +128,6 @@ func mainPage(storage *storage.MemStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			urlPart := strings.Split(r.URL.Path, "/")
-			//log.Println(strconv.Itoa(len(urlPart) - idx))
 			if len(urlPart) > 2 {
 				http.Error(w, "Wrong URL", http.StatusBadRequest)
 				return
@@ -186,12 +155,10 @@ func mainPage(storage *storage.MemStorage) http.HandlerFunc {
 }
 
 func main() {
+	config := GetServerConfig()
 	var MetricStorage storage.MemStorage
 	MetricStorage.Gauge = make(map[string]float64)
 	MetricStorage.Counter = make(map[string]int64)
-
-	// mux := http.NewServeMux()
-	// mux.HandleFunc(`/update/`, mainPage)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -199,5 +166,7 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", UpdateMetric(&MetricStorage))
 	r.Get("/value/{type}/{name}", GetMetric(&MetricStorage))
 	r.Get("/", mainPage(&MetricStorage))
-	http.ListenAndServe(":8080", r)
+
+	port := strings.Split(config.endpoint, ":")
+	http.ListenAndServe(":"+port[1], r)
 }
