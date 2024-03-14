@@ -2,84 +2,21 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	storage "github.com/justEngineer/go-metrics-service/internal"
+	server "github.com/justEngineer/go-metrics-service/internal/http/server"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-// func TestUpdateMetric(t *testing.T) {
-// 	type want struct {
-// 		contentType string
-// 		statusCode  int
-// 		user        User
-// 	}
-// 	tests := []struct {
-// 		name    string
-// 		request string
-// 		users   map[string]User
-// 		want    want
-// 	}{
-// 		{
-// 			name: "simple test #1",
-// 			users: map[string]User{
-// 				"id1": {
-// 					ID:        "id1",
-// 					FirstName: "Misha",
-// 					LastName:  "Popov",
-// 				},
-// 			},
-// 			want: want{
-// 				contentType: "application/json",
-// 				statusCode:  200,
-// 				user: User{ID: "id1",
-// 					FirstName: "Misha",
-// 					LastName:  "Popov",
-// 				},
-// 			},
-// 			request: "/users?user_id=id1",
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			request := httptest.NewRequest(http.MethodPost, tt.request, nil)
-// 			w := httptest.NewRecorder()
-// 			h := http.HandlerFunc(UpdateMetric(tt.users))
-// 			h(w, request)
-
-// 			result := w.Result()
-
-// 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
-// 			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
-
-// 			userResult, err := io.ReadAll(result.Body)
-// 			require.NoError(t, err)
-// 			err = result.Body.Close()
-// 			require.NoError(t, err)
-
-// 			err = json.Unmarshal(userResult, &user)
-// 			require.NoError(t, err)
-
-// 			assert.Equal(t, tt.want.user, user)
-// 		})
-// 	}
-// }
-
-// package main
-
-// import (
-//     "net/http"
-//     "net/http/httptest"
-//     "testing"
-
-//     "github.com/stretchr/testify/assert"
-// )
 
 func TestUpdateMetric(t *testing.T) {
 	// описываем набор данных: метод запроса, ожидаемый код ответа, ожидаемое тело
@@ -108,15 +45,77 @@ func TestUpdateMetric(t *testing.T) {
 
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
-			var MetricStorage storage.MemStorage
-			MetricStorage.Gauge = make(map[string]float64)
-			MetricStorage.Counter = make(map[string]int64)
-			handler := UpdateMetric(&MetricStorage)
+			MetricStorage := storage.New()
+			config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
+			ServerHandler := server.New(MetricStorage, &config)
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			handler(w, r)
-
+			ServerHandler.UpdateMetric(w, r)
 			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
 			//assert.Equal(t, "text/plain", r.Header.Get("Content-Type"))
 		})
 	}
+}
+
+func TestGetMetric(t *testing.T) {
+	// описываем набор данных: метод запроса, ожидаемый код ответа, ожидаемое тело
+	testCases := []struct {
+		method          string
+		url             string
+		expectedCode    int
+		expectedCounter int64
+		expectedGauge   float64
+	}{
+		{method: http.MethodGet, url: "http://localhost:8080/value/gauge/temp/",
+			expectedCode: http.StatusOK, expectedCounter: int64(0), expectedGauge: float64(36.6)},
+		{method: http.MethodGet, url: "http://localhost:8080/value/counter/timeoutInterval/",
+			expectedCode: http.StatusOK, expectedCounter: int64(10), expectedGauge: float64(0)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.method, func(t *testing.T) {
+			r := httptest.NewRequest(tc.method, tc.url, nil)
+			w := httptest.NewRecorder()
+
+			urlPart := strings.Split(r.URL.Path, "/")
+			idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "value" })
+			typeIdx := idx + 1
+			nameIdx := idx + 2
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("type", urlPart[typeIdx])
+			rctx.URLParams.Add("name", urlPart[nameIdx])
+			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+			MetricStorage := storage.New()
+			MetricStorage.Gauge["temp"] = 36.6
+			MetricStorage.Counter["timeoutInterval"] = 10
+			config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
+			ServerHandler := server.New(MetricStorage, &config)
+			// вызовем хендлер как обычную функцию, без запуска самого сервера
+			ServerHandler.GetMetric(w, r)
+			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
+			data, err := io.ReadAll(w.Body)
+			require.Equal(t, err, nil)
+			if slices.IndexFunc(urlPart, func(c string) bool { return c == "gauge" }) >= 0 {
+				value, err := strconv.ParseFloat(string(data), 64)
+				require.Equal(t, err, nil)
+				assert.Equal(t, tc.expectedGauge, value, "Код ответа не совпадает с ожидаемым")
+			} else if slices.IndexFunc(urlPart, func(c string) bool { return c == "counter" }) >= 0 {
+				value, err := strconv.ParseInt(string(data), 10, 64)
+				require.Equal(t, err, nil)
+				assert.Equal(t, tc.expectedCounter, value, "Код ответа не совпадает с ожидаемым")
+			}
+			assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+		})
+	}
+}
+
+func TestMainPage(t *testing.T) {
+	MetricStorage := storage.New()
+	config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
+
+	ServerHandler := server.New(MetricStorage, &config)
+	r := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
+	w := httptest.NewRecorder()
+	ServerHandler.MainPage(w, r)
+	assert.Equal(t, http.StatusOK, w.Code, "Код ответа не совпадает с ожидаемым")
 }
