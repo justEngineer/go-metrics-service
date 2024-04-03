@@ -27,6 +27,8 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", ServerHandler.UpdateMetric)
 	r.Get("/value/{type}/{name}", ServerHandler.GetMetric)
 	r.Get("/", ServerHandler.MainPage)
+	r.Post("/update/", ServerHandler.UpdateMetricFromJSON)
+	r.Post("/value/", ServerHandler.GetMetricAsJSON)
 
 	port := strings.Split(config.Endpoint, ":")
 	log.Fatal(http.ListenAndServe(":"+port[1], r))

@@ -9,9 +9,15 @@ import (
 	"strconv"
 	"strings"
 
+	"bytes"
+	"encoding/json"
+
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 
 	storage "github.com/justEngineer/go-metrics-service/internal"
+	logger "github.com/justEngineer/go-metrics-service/internal/logger"
+	model "github.com/justEngineer/go-metrics-service/internal/models"
 )
 
 type Handler struct {
@@ -141,4 +147,106 @@ func (h *Handler) MainPage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+}
+
+func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
+	// if r.Header.Get("Content-Type") != "application/json" {
+	// 	logger.Log.Warn("Content-Type should be application/json")
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+	var requestedMetric model.Metrics
+	var buffer bytes.Buffer
+	_, err := buffer.ReadFrom(r.Body)
+	if err != nil {
+		logger.Log.Warn("Error parsing request body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
+		logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if requestedMetric.MType == "gauge" {
+		val, ok := h.storage.Gauge[requestedMetric.ID]
+		if ok {
+			requestedMetric.Value = &val
+		} else {
+			logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	} else if requestedMetric.MType == "counter" {
+		val, ok := h.storage.Counter[requestedMetric.ID]
+		if ok {
+			requestedMetric.Delta = &val
+		} else {
+			logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	body, err := json.Marshal(requestedMetric)
+	if err != nil {
+		logger.Log.Warn("Error converting response body to JSON", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(body)
+	if err != nil {
+		logger.Log.Warn("Error writing response body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
+	// if r.Header.Get("Content-Type") != "application/json" {
+	// 	logger.Log.Warn("Content-Type should be application/json")
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+	var requestedMetric model.Metrics
+	var buffer bytes.Buffer
+	_, err := buffer.ReadFrom(r.Body)
+	if err != nil {
+		logger.Log.Warn("Error parsing request body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
+		logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if requestedMetric.MType == "gauge" {
+		h.storage.Gauge[requestedMetric.ID] = *requestedMetric.Value
+	} else if requestedMetric.MType == "counter" {
+		h.storage.Counter[requestedMetric.ID] += *requestedMetric.Delta
+		val := h.storage.Counter[requestedMetric.ID]
+		requestedMetric.Delta = &val
+	} else {
+		http.Error(w, "Unknown metric type", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	body, err := json.Marshal(requestedMetric)
+	if err != nil {
+		logger.Log.Warn("Error converting response body to JSON", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(body)
+	if err != nil {
+		logger.Log.Warn("Error writing response body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
