@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"time"
 
-	storage "github.com/justEngineer/go-metrics-service/internal"
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
+	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )

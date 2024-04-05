@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	storage "github.com/justEngineer/go-metrics-service/internal"
 	server "github.com/justEngineer/go-metrics-service/internal/http/server"
+	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"

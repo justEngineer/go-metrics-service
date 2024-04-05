@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type (
@@ -50,6 +51,7 @@ func Initialize(level string) error {
 	cfg := zap.NewProductionConfig()
 	// устанавливаем уровень
 	cfg.Level = lvl
+	cfg.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
 	// создаём логер на основе конфигурации
 	zl, err := cfg.Build()
 	if err != nil {

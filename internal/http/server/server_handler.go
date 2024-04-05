@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	storage "github.com/justEngineer/go-metrics-service/internal"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
+	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 type Handler struct {
@@ -115,38 +115,40 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) MainPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		urlPart := strings.Split(r.URL.Path, "/")
-		if len(urlPart) > 2 {
-			http.Error(w, "Wrong URL", http.StatusBadRequest)
-			return
-		}
-		if len(urlPart[1]) != 0 {
-			http.Error(w, "Wrong URL", http.StatusBadRequest)
-			return
-		}
-		wd, err := os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		tmplFile := filepath.Join(filepath.Dir(wd), h.config.PathToHTMLTemplate)
-		tmpl, err := template.New(tmplFile).ParseFiles(tmplFile)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		filename := h.config.PathToHTMLTemplate[strings.LastIndex(h.config.PathToHTMLTemplate, "/")+1:]
-		err = tmpl.ExecuteTemplate(w, filename, h.storage)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		return
-	} else {
-		w.WriteHeader(http.StatusBadRequest)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	urlPart := strings.Split(r.URL.Path, "/")
+	if len(urlPart) > 2 {
+		http.Error(w, "Wrong URL", http.StatusBadRequest)
 		return
 	}
+	if len(urlPart[1]) != 0 {
+		http.Error(w, "Wrong URL", http.StatusBadRequest)
+		return
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	tmplFile := filepath.Join(filepath.Dir(wd), h.config.PathToHTMLTemplate)
+	tmpl, err := template.New(tmplFile).ParseFiles(tmplFile)
+	if err != nil {
+		tmplFile := filepath.Join(filepath.Dir(wd), "/go-metrics-service/internal/http/server/main_page_html.tmpl")
+		tmpl, err = template.New(tmplFile).ParseFiles(tmplFile)
+		w.Header().Set("Content-Encoding", "gzip")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			//			panic(err)
+			return
+		}
+	}
+	filename := h.config.PathToHTMLTemplate[strings.LastIndex(h.config.PathToHTMLTemplate, "/")+1:]
+	err = tmpl.ExecuteTemplate(w, filename, h.storage)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		//		panic(err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
@@ -197,13 +199,13 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(body)
 	if err != nil {
 		logger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
@@ -242,11 +244,11 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(body)
 	if err != nil {
 		logger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }

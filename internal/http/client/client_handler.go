@@ -10,9 +10,11 @@ import (
 
 	"context"
 
-	storage "github.com/justEngineer/go-metrics-service/internal"
-	"github.com/justEngineer/go-metrics-service/internal/logger"
+	"compress/gzip"
+
+	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
+	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 	"go.uber.org/zap"
 )
 
@@ -28,9 +30,6 @@ func New(metricsService *storage.MemStorage, config *ClientConfig) *Handler {
 func (h *Handler) GetMetrics(ctx context.Context) {
 	pollTicker := time.NewTicker(time.Duration(h.config.pollInterval) * time.Second)
 	defer pollTicker.Stop()
-
-	//_, cancel := context.WithTimeout(ctx, time.Duration(h.config.pollInterval)*time.Second)
-	//defer cancel()
 	for {
 		select {
 		case <-ctx.Done():
@@ -70,19 +69,49 @@ func (h *Handler) GetMetrics(ctx context.Context) {
 
 			h.storage.Counter["PollCount"] += 1
 			h.storage.Mutex.Unlock()
-			time.Sleep(time.Second * time.Duration(h.config.pollInterval))
+			//time.Sleep(time.Second * time.Duration(h.config.pollInterval))
 		}
 	}
+}
+
+func sendRequest(metric model.Metrics, url *string, client *http.Client) error {
+	body, err := json.Marshal(metric)
+	if err != nil {
+		panic(err)
+	}
+	var buf bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buf)
+	_, err = gzipWriter.Write(body)
+	if err != nil {
+		panic(err)
+	}
+	err = gzipWriter.Close()
+	if err != nil {
+		panic(err)
+	}
+	body = buf.Bytes()
+	request, err := http.NewRequest(http.MethodPost, *url, bytes.NewReader(body))
+	if err != nil {
+		panic(err)
+	}
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Set("Accept-Encoding", "gzip")
+	request.Header.Set("Content-Encoding", "gzip")
+	response, err := client.Do(request)
+	if err != nil {
+		logger.Log.Info("request sending is failed", zap.String("error", err.Error()))
+		return err
+	}
+	response.Body.Close()
+	return nil
 }
 
 func (h *Handler) SendMetrics(ctx context.Context) {
 	sendTicker := time.NewTicker(time.Duration(h.config.reportInterval) * time.Second)
 	defer sendTicker.Stop()
+
 	client := http.Client{Timeout: time.Second * 1}
 	url := "http://" + h.config.endpoint + "/update/"
-
-	//_, cancel := context.WithTimeout(ctx, time.Duration(h.config.reportInterval)*time.Second)
-	//defer cancel()
 	for {
 		select {
 		case <-ctx.Done():
@@ -95,22 +124,9 @@ func (h *Handler) SendMetrics(ctx context.Context) {
 					MType: "gauge",
 					Value: &value,
 				}
-				body, err := json.Marshal(metric)
-				if err != nil {
-					panic(err)
-				}
-				request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-				if err != nil {
-					panic(err)
-				}
-				request.Header.Add("Content-Type", "application/json")
-				response, err := client.Do(request)
-				if err != nil {
-					logger.Log.Info("request sending is failed", zap.String("error", err.Error()))
+				if sendRequest(metric, &url, &client) != nil {
 					break
-					//return
 				}
-				response.Body.Close()
 			}
 			for id, value := range h.storage.Counter {
 				metric := model.Metrics{
@@ -118,22 +134,9 @@ func (h *Handler) SendMetrics(ctx context.Context) {
 					MType: "counter",
 					Delta: &value,
 				}
-				body, err := json.Marshal(metric)
-				if err != nil {
-					panic(err)
-				}
-				request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-				if err != nil {
-					panic(err)
-				}
-				request.Header.Add("Content-Type", "application/json")
-				response, err := client.Do(request)
-				if err != nil {
-					logger.Log.Info("request sending is failed", zap.String("error", err.Error()))
+				if sendRequest(metric, &url, &client) != nil {
 					break
-					//return
 				}
-				response.Body.Close()
 			}
 			h.storage.Mutex.Unlock()
 		}
