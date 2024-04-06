@@ -19,12 +19,13 @@ import (
 )
 
 type Handler struct {
-	storage *storage.MemStorage
-	config  *ClientConfig
+	storage   *storage.MemStorage
+	config    *ClientConfig
+	appLogger *logger.Logger
 }
 
-func New(metricsService *storage.MemStorage, config *ClientConfig) *Handler {
-	return &Handler{metricsService, config}
+func New(metricsService *storage.MemStorage, config *ClientConfig, appLogger *logger.Logger) *Handler {
+	return &Handler{metricsService, config, appLogger}
 }
 
 func (h *Handler) GetMetrics(ctx context.Context) {
@@ -69,12 +70,11 @@ func (h *Handler) GetMetrics(ctx context.Context) {
 
 			h.storage.Counter["PollCount"] += 1
 			h.storage.Mutex.Unlock()
-			//time.Sleep(time.Second * time.Duration(h.config.pollInterval))
 		}
 	}
 }
 
-func sendRequest(metric model.Metrics, url *string, client *http.Client) error {
+func (h *Handler) sendRequest(metric model.Metrics, url *string, client *http.Client) error {
 	body, err := json.Marshal(metric)
 	if err != nil {
 		panic(err)
@@ -99,7 +99,7 @@ func sendRequest(metric model.Metrics, url *string, client *http.Client) error {
 	request.Header.Set("Content-Encoding", "gzip")
 	response, err := client.Do(request)
 	if err != nil {
-		logger.Log.Info("request sending is failed", zap.String("error", err.Error()))
+		h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
 		return err
 	}
 	response.Body.Close()
@@ -124,7 +124,7 @@ func (h *Handler) SendMetrics(ctx context.Context) {
 					MType: "gauge",
 					Value: &value,
 				}
-				if sendRequest(metric, &url, &client) != nil {
+				if h.sendRequest(metric, &url, &client) != nil {
 					break
 				}
 			}
@@ -134,7 +134,7 @@ func (h *Handler) SendMetrics(ctx context.Context) {
 					MType: "counter",
 					Delta: &value,
 				}
-				if sendRequest(metric, &url, &client) != nil {
+				if h.sendRequest(metric, &url, &client) != nil {
 					break
 				}
 			}

@@ -2,25 +2,30 @@ package main
 
 import (
 	"context"
+	"log"
 	"os/signal"
 	"sync"
 	"syscall"
 
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
+	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 func main() {
 	MetricStorage := storage.New()
 	config := client.Parse()
-	ClientHandler := client.New(MetricStorage, &config)
+	appLogger, err := logger.New(config.LogLevel)
+	if err != nil {
+		log.Fatalf("Logger wasn't initialized due to %s", err)
+	}
+	ClientHandler := client.New(MetricStorage, &config, appLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 	)
-	//defer
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"syscall"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
+	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +20,11 @@ import (
 func TestGetMetrics(t *testing.T) {
 	MetricStorage := storage.New()
 	config := client.Parse()
-	ClientHandler := client.New(MetricStorage, &config)
+	appLogger, err := logger.New(config.LogLevel)
+	if err != nil {
+		log.Fatalf("Logger wasn't initialized due to %s", err)
+	}
+	ClientHandler := client.New(MetricStorage, &config, appLogger)
 	ctx, cancel := context.WithCancel(context.Background())
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)

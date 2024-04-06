@@ -1,16 +1,16 @@
 package server
 
 import (
+	_ "embed"
 	"html/template"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"bytes"
 	"encoding/json"
+	"io"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -20,21 +20,20 @@ import (
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
+//go:embed main_page_html.tmpl
+var mainPageTemplateFile string
+
 type Handler struct {
-	storage *storage.MemStorage
-	config  *ServerConfig
+	storage   *storage.MemStorage
+	config    *ServerConfig
+	appLogger *logger.Logger
 }
 
-func New(metricsService *storage.MemStorage, config *ServerConfig) *Handler {
-	return &Handler{metricsService, config}
+func New(metricsService *storage.MemStorage, config *ServerConfig, log *logger.Logger) *Handler {
+	return &Handler{metricsService, config, log}
 }
 
 func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		// разрешаем только POST-запросы
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 	urlPart := strings.Split(r.URL.Path, "/")
 	idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "value" })
 	if len(urlPart)-idx < 3 {
@@ -73,11 +72,6 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		// разрешаем только POST-запросы
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 	urlPart := strings.Split(r.URL.Path, "/")
 	idx := slices.IndexFunc(urlPart, func(c string) bool { return c == "update" })
 	if len(urlPart)-idx < 4 {
@@ -115,7 +109,6 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) MainPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	urlPart := strings.Split(r.URL.Path, "/")
 	if len(urlPart) > 2 {
 		http.Error(w, "Wrong URL", http.StatusBadRequest)
@@ -125,48 +118,38 @@ func (h *Handler) MainPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Wrong URL", http.StatusBadRequest)
 		return
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	tmplFile := filepath.Join(filepath.Dir(wd), h.config.PathToHTMLTemplate)
-	tmpl, err := template.New(tmplFile).ParseFiles(tmplFile)
-	if err != nil {
-		tmplFile := filepath.Join(filepath.Dir(wd), "/go-metrics-service/internal/http/server/main_page_html.tmpl")
-		tmpl, err = template.New(tmplFile).ParseFiles(tmplFile)
-		w.Header().Set("Content-Encoding", "gzip")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			//			panic(err)
-			return
-		}
-	}
-	filename := h.config.PathToHTMLTemplate[strings.LastIndex(h.config.PathToHTMLTemplate, "/")+1:]
-	err = tmpl.ExecuteTemplate(w, filename, h.storage)
+	tmpl, err := template.New("mainPage").Parse(mainPageTemplateFile)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		//		panic(err)
+		panic(err)
+	}
+	var body bytes.Buffer
+	err = tmpl.Execute(io.Writer(&body), h.storage)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(body.Bytes())
+	if err != nil {
+		h.appLogger.Log.Warn("Error writing response body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
-	// if r.Header.Get("Content-Type") != "application/json" {
-	// 	logger.Log.Warn("Content-Type should be application/json")
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	return
-	// }
 	var requestedMetric model.Metrics
 	var buffer bytes.Buffer
 	_, err := buffer.ReadFrom(r.Body)
 	if err != nil {
-		logger.Log.Warn("Error parsing request body", zap.Error(err))
+		h.appLogger.Log.Warn("Error parsing request body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
-		logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -175,7 +158,7 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			requestedMetric.Value = &val
 		} else {
-			logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -184,7 +167,7 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			requestedMetric.Delta = &val
 		} else {
-			logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -195,35 +178,30 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	body, err := json.Marshal(requestedMetric)
 	if err != nil {
-		logger.Log.Warn("Error converting response body to JSON", zap.Error(err))
+		h.appLogger.Log.Warn("Error converting response body to JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(body)
 	if err != nil {
-		logger.Log.Warn("Error writing response body", zap.Error(err))
+		h.appLogger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
-	// if r.Header.Get("Content-Type") != "application/json" {
-	// 	logger.Log.Warn("Content-Type should be application/json")
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	return
-	// }
 	var requestedMetric model.Metrics
 	var buffer bytes.Buffer
 	_, err := buffer.ReadFrom(r.Body)
 	if err != nil {
-		logger.Log.Warn("Error parsing request body", zap.Error(err))
+		h.appLogger.Log.Warn("Error parsing request body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
-		logger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -240,14 +218,14 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	body, err := json.Marshal(requestedMetric)
 	if err != nil {
-		logger.Log.Warn("Error converting response body to JSON", zap.Error(err))
+		h.appLogger.Log.Warn("Error converting response body to JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(body)
 	if err != nil {
-		logger.Log.Warn("Error writing response body", zap.Error(err))
+		h.appLogger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

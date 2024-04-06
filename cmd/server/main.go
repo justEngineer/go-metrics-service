@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	filedump "github.com/justEngineer/go-metrics-service/internal/filestorage"
 	compression "github.com/justEngineer/go-metrics-service/internal/gzip"
 	server "github.com/justEngineer/go-metrics-service/internal/http/server"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
@@ -17,13 +22,16 @@ import (
 func main() {
 	config := server.Parse()
 	MetricStorage := storage.New()
-	ServerHandler := server.New(MetricStorage, &config)
-	r := chi.NewRouter()
-
-	if err := logger.Initialize(config.LogLevel); err != nil {
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	appLogger, err := logger.New(config.LogLevel)
+	filedump.New(MetricStorage, &config, ctx, appLogger)
+	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
-	r.Use(logger.RequestLogger)
+	ServerHandler := server.New(MetricStorage, &config, appLogger)
+	r := chi.NewRouter()
+	r.Use(appLogger.RequestLogger)
 	r.Use(middleware.Recoverer)
 	// gzipMiddleware := middleware.NewCompressor(gzip.BestCompression)
 	// r.Use(gzipMiddleware.Handler)
@@ -37,4 +45,7 @@ func main() {
 	port := strings.Split(config.Endpoint, ":")
 	log.Fatal(http.ListenAndServe(":"+port[1], r))
 
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
+	<-signalChannel
 }
