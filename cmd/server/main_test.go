@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	server "github.com/justEngineer/go-metrics-service/internal/http/server"
+	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
@@ -48,12 +49,12 @@ func TestUpdateMetric(t *testing.T) {
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			MetricStorage := storage.New()
-			config := server.ServerConfig{Endpoint: ""}
-			appLogger, err := logger.New(config.LogLevel)
+			cfg := config.ServerConfig{Endpoint: ""}
+			appLogger, err := logger.New(cfg.LogLevel)
 			if err != nil {
 				log.Fatalf("Logger wasn't initialized due to %s", err)
 			}
-			ServerHandler := server.New(MetricStorage, &config, appLogger)
+			ServerHandler := server.New(MetricStorage, &cfg, appLogger, nil)
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
 			ServerHandler.UpdateMetric(w, r)
 			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
@@ -94,12 +95,12 @@ func TestGetMetric(t *testing.T) {
 			MetricStorage := storage.New()
 			MetricStorage.Gauge["temp"] = 36.6
 			MetricStorage.Counter["timeoutInterval"] = 10
-			config := server.ServerConfig{Endpoint: ""}
-			appLogger, err := logger.New(config.LogLevel)
+			cfg := config.ServerConfig{Endpoint: ""}
+			appLogger, err := logger.New(cfg.LogLevel)
 			if err != nil {
 				log.Fatalf("Logger wasn't initialized due to %s", err)
 			}
-			ServerHandler := server.New(MetricStorage, &config, appLogger)
+			ServerHandler := server.New(MetricStorage, &cfg, appLogger, nil)
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
 			ServerHandler.GetMetric(w, r)
 			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
@@ -121,12 +122,12 @@ func TestGetMetric(t *testing.T) {
 
 func TestMainPage(t *testing.T) {
 	MetricStorage := storage.New()
-	config := server.ServerConfig{Endpoint: ""}
-	appLogger, err := logger.New(config.LogLevel)
+	cfg := config.ServerConfig{Endpoint: ""}
+	appLogger, err := logger.New(cfg.LogLevel)
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
-	ServerHandler := server.New(MetricStorage, &config, appLogger)
+	ServerHandler := server.New(MetricStorage, &cfg, appLogger, nil)
 	r := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
 	w := httptest.NewRecorder()
 	ServerHandler.MainPage(w, r)
