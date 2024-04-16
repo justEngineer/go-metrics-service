@@ -12,37 +12,43 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	database "github.com/justEngineer/go-metrics-service/internal/database"
 	filedump "github.com/justEngineer/go-metrics-service/internal/filestorage"
 	compression "github.com/justEngineer/go-metrics-service/internal/gzip"
-	server "github.com/justEngineer/go-metrics-service/internal/http/server"
+	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 func main() {
-	config := server.Parse()
+	cfg := config.Parse()
 	MetricStorage := storage.New()
+	dbConnecton, err := database.NewConnection(&cfg)
+	if err != nil {
+		log.Printf("Database connection failed %s", err)
+	}
+	defer dbConnecton.Connection.Close()
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
-	appLogger, err := logger.New(config.LogLevel)
-	filedump.New(MetricStorage, &config, ctx, appLogger)
+	appLogger, err := logger.New(cfg.LogLevel)
+	filedump.New(MetricStorage, &cfg, ctx, appLogger)
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
-	ServerHandler := server.New(MetricStorage, &config, appLogger)
+	ServerHandler := server.New(MetricStorage, &cfg, appLogger, dbConnecton)
 	r := chi.NewRouter()
 	r.Use(appLogger.RequestLogger)
 	r.Use(middleware.Recoverer)
-	// gzipMiddleware := middleware.NewCompressor(gzip.BestCompression)
-	// r.Use(gzipMiddleware.Handler)
 	r.Use(compression.GzipMiddleware)
 	r.Post("/update/{type}/{name}/{value}", ServerHandler.UpdateMetric)
 	r.Get("/value/{type}/{name}", ServerHandler.GetMetric)
 	r.Get("/", ServerHandler.MainPage)
 	r.Post("/update/", ServerHandler.UpdateMetricFromJSON)
 	r.Post("/value/", ServerHandler.GetMetricAsJSON)
+	r.Get("/ping", ServerHandler.CheckDBConnection)
 
-	port := strings.Split(config.Endpoint, ":")
+	port := strings.Split(cfg.Endpoint, ":")
 	log.Fatal(http.ListenAndServe(":"+port[1], r))
 
 	signalChannel := make(chan os.Signal, 1)

@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	server "github.com/justEngineer/go-metrics-service/internal/http/server"
+	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 	"go.uber.org/zap"
@@ -15,7 +15,7 @@ import (
 
 type FileStorage struct {
 	storage *storage.MemStorage
-	config  *server.ServerConfig
+	config  *config.ServerConfig
 }
 
 func (fs FileStorage) SaveDumpToFile() error {
@@ -31,7 +31,7 @@ func (fs FileStorage) SaveDumpToFile() error {
 	return nil
 }
 
-func New(metricStorage *storage.MemStorage, config *server.ServerConfig, ctx context.Context, logger *logger.Logger) *FileStorage {
+func New(metricStorage *storage.MemStorage, config *config.ServerConfig, ctx context.Context, logger *logger.Logger) *FileStorage {
 	if config.FileStorePath == "" {
 		return nil
 	}

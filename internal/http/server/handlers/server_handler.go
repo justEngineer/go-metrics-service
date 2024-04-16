@@ -15,6 +15,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	database "github.com/justEngineer/go-metrics-service/internal/database"
+	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
@@ -24,13 +26,14 @@ import (
 var mainPageTemplateFile string
 
 type Handler struct {
-	storage   *storage.MemStorage
-	config    *ServerConfig
-	appLogger *logger.Logger
+	storage      *storage.MemStorage
+	config       *config.ServerConfig
+	appLogger    *logger.Logger
+	DBConnection *database.Database
 }
 
-func New(metricsService *storage.MemStorage, config *ServerConfig, log *logger.Logger) *Handler {
-	return &Handler{metricsService, config, log}
+func New(metricsService *storage.MemStorage, config *config.ServerConfig, log *logger.Logger, conn *database.Database) *Handler {
+	return &Handler{metricsService, config, log, conn}
 }
 
 func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
@@ -228,5 +231,14 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 		h.appLogger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+}
+
+func (h *Handler) CheckDBConnection(w http.ResponseWriter, r *http.Request) {
+	err := h.DBConnection.Ping()
+	if err == nil {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

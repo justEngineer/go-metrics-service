@@ -1,4 +1,4 @@
-package server
+package config
 
 import (
 	"flag"
@@ -13,6 +13,7 @@ type ServerConfig struct {
 	StoreInterval int
 	FileStorePath string
 	Restore       bool
+	DBConnection  string
 }
 
 func Parse() ServerConfig {
@@ -22,6 +23,7 @@ func Parse() ServerConfig {
 	flag.IntVar(&cfg.StoreInterval, "i", 300, "store interval file")
 	flag.StringVar(&cfg.FileStorePath, "f", "/tmp/metrics-db.json", "path file")
 	flag.BoolVar(&cfg.Restore, "r", true, "restore file")
+	flag.StringVar(&cfg.DBConnection, "d", "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable", "postgres database connection string")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
 		cfg.Endpoint = res
@@ -47,6 +49,9 @@ func Parse() ServerConfig {
 		} else {
 			cfg.Restore = value
 		}
+	}
+	if res := os.Getenv("DATABASE_DSN"); res != "" {
+		cfg.DBConnection = res
 	}
 	return cfg
 }
