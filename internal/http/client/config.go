@@ -11,6 +11,7 @@ type ClientConfig struct {
 	endpoint       string
 	reportInterval uint64
 	pollInterval   uint64
+	LogLevel       string
 }
 
 func Parse() ClientConfig {
@@ -18,9 +19,13 @@ func Parse() ClientConfig {
 	flag.StringVar(&cfg.endpoint, "a", "localhost:8080", "server host/port")
 	flag.Uint64Var(&cfg.reportInterval, "r", 10, "update notification sending interval")
 	flag.Uint64Var(&cfg.pollInterval, "p", 2, "polling stats interval")
+	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
 		cfg.endpoint = res
+	}
+	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
+		cfg.LogLevel = envLogLevel
 	}
 	if reportIntervalEnv := os.Getenv("REPORT_INTERVAL"); reportIntervalEnv != "" {
 		res, err := strconv.Atoi(reportIntervalEnv)

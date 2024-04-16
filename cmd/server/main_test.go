@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -10,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	storage "github.com/justEngineer/go-metrics-service/internal"
 	server "github.com/justEngineer/go-metrics-service/internal/http/server"
+	logger "github.com/justEngineer/go-metrics-service/internal/logger"
+	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -46,8 +48,12 @@ func TestUpdateMetric(t *testing.T) {
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
 			MetricStorage := storage.New()
-			config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
-			ServerHandler := server.New(MetricStorage, &config)
+			config := server.ServerConfig{Endpoint: ""}
+			appLogger, err := logger.New(config.LogLevel)
+			if err != nil {
+				log.Fatalf("Logger wasn't initialized due to %s", err)
+			}
+			ServerHandler := server.New(MetricStorage, &config, appLogger)
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
 			ServerHandler.UpdateMetric(w, r)
 			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
@@ -88,8 +94,12 @@ func TestGetMetric(t *testing.T) {
 			MetricStorage := storage.New()
 			MetricStorage.Gauge["temp"] = 36.6
 			MetricStorage.Counter["timeoutInterval"] = 10
-			config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
-			ServerHandler := server.New(MetricStorage, &config)
+			config := server.ServerConfig{Endpoint: ""}
+			appLogger, err := logger.New(config.LogLevel)
+			if err != nil {
+				log.Fatalf("Logger wasn't initialized due to %s", err)
+			}
+			ServerHandler := server.New(MetricStorage, &config, appLogger)
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
 			ServerHandler.GetMetric(w, r)
 			assert.Equal(t, tc.expectedCode, w.Code, "Код ответа не совпадает с ожидаемым")
@@ -111,9 +121,12 @@ func TestGetMetric(t *testing.T) {
 
 func TestMainPage(t *testing.T) {
 	MetricStorage := storage.New()
-	config := server.ServerConfig{Endpoint: "", PathToHTMLTemplate: server.DefaultPathToHTMLTemplate}
-
-	ServerHandler := server.New(MetricStorage, &config)
+	config := server.ServerConfig{Endpoint: ""}
+	appLogger, err := logger.New(config.LogLevel)
+	if err != nil {
+		log.Fatalf("Logger wasn't initialized due to %s", err)
+	}
+	ServerHandler := server.New(MetricStorage, &config, appLogger)
 	r := httptest.NewRequest(http.MethodGet, "http://localhost:8080/", nil)
 	w := httptest.NewRecorder()
 	ServerHandler.MainPage(w, r)
