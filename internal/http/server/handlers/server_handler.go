@@ -9,12 +9,15 @@ import (
 	"strings"
 
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	database "github.com/justEngineer/go-metrics-service/internal/database"
+	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
@@ -23,14 +26,26 @@ import (
 //go:embed main_page_html.tmpl
 var mainPageTemplateFile string
 
-type Handler struct {
-	storage   *storage.MemStorage
-	config    *ServerConfig
-	appLogger *logger.Logger
+type Storage interface {
+	GetGaugeMetric(ctx context.Context, key string) (float64, error)
+	GetCounterMetric(ctx context.Context, key string) (int64, error)
+	SetGaugeMetric(ctx context.Context, key string, value float64) error
+	SetCounterMetric(ctx context.Context, key string, value int64) error
 }
 
-func New(metricsService *storage.MemStorage, config *ServerConfig, log *logger.Logger) *Handler {
-	return &Handler{metricsService, config, log}
+type Handler struct {
+	storage      Storage
+	config       *config.ServerConfig
+	appLogger    *logger.Logger
+	DBConnection *database.Database
+}
+
+func New(metricsService *storage.MemStorage, config *config.ServerConfig, log *logger.Logger, conn *database.Database) *Handler {
+	if config.DBConnection == "" {
+		return &Handler{metricsService, config, log, conn}
+	} else {
+		return &Handler{conn, config, log, conn}
+	}
 }
 
 func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
@@ -44,15 +59,15 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body string
 	if valueType == "gauge" {
-		val, ok := h.storage.Gauge[name]
-		if ok {
+		val, err := h.storage.GetGaugeMetric(context.Background(), name)
+		if err == nil {
 			body = strconv.FormatFloat(val, 'f', -1, 64)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	} else if valueType == "counter" {
-		val, ok := h.storage.Counter[name]
-		if ok {
+		val, err := h.storage.GetCounterMetric(context.Background(), name)
+		if err == nil {
 			body = strconv.FormatInt(val, 10)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -84,7 +99,12 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if valueType == "gauge" {
 		value, err := strconv.ParseFloat(valueStr, 64)
 		if err == nil {
-			h.storage.Gauge[name] = value
+			err = h.storage.SetGaugeMetric(context.Background(), name, value)
+			if err != nil {
+				h.appLogger.Log.Warn("Error while updating gauge metric", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		} else {
 			http.Error(w, "Wrong data type, float64 is expected", http.StatusBadRequest)
 			return
@@ -92,7 +112,12 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	} else if valueType == "counter" {
 		value, err := strconv.ParseInt(valueStr, 10, 64)
 		if err == nil {
-			h.storage.Counter[name] += value
+			err = h.storage.SetCounterMetric(context.Background(), name, value)
+			if err != nil {
+				h.appLogger.Log.Warn("Error while updating counter metric", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		} else {
 			http.Error(w, "Wrong data type, int64 is expected", http.StatusBadRequest)
 			return
@@ -154,8 +179,8 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requestedMetric.MType == "gauge" {
-		val, ok := h.storage.Gauge[requestedMetric.ID]
-		if ok {
+		val, err := h.storage.GetGaugeMetric(context.Background(), requestedMetric.ID)
+		if err == nil {
 			requestedMetric.Value = &val
 		} else {
 			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
@@ -163,8 +188,8 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if requestedMetric.MType == "counter" {
-		val, ok := h.storage.Counter[requestedMetric.ID]
-		if ok {
+		val, err := h.storage.GetCounterMetric(context.Background(), requestedMetric.ID)
+		if err == nil {
 			requestedMetric.Delta = &val
 		} else {
 			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
@@ -206,10 +231,20 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requestedMetric.MType == "gauge" {
-		h.storage.Gauge[requestedMetric.ID] = *requestedMetric.Value
+		err = h.storage.SetGaugeMetric(context.Background(), requestedMetric.ID, *requestedMetric.Value)
+		if err != nil {
+			h.appLogger.Log.Warn("Error while updating gauge metric", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	} else if requestedMetric.MType == "counter" {
-		h.storage.Counter[requestedMetric.ID] += *requestedMetric.Delta
-		val := h.storage.Counter[requestedMetric.ID]
+		err = h.storage.SetCounterMetric(context.Background(), requestedMetric.ID, *requestedMetric.Delta)
+		if err != nil {
+			h.appLogger.Log.Warn("Error while updating gauge metric", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		val, _ := h.storage.GetCounterMetric(context.Background(), requestedMetric.ID)
 		requestedMetric.Delta = &val
 	} else {
 		http.Error(w, "Unknown metric type", http.StatusBadRequest)
@@ -228,5 +263,14 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 		h.appLogger.Log.Warn("Error writing response body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+}
+
+func (h *Handler) CheckDBConnection(w http.ResponseWriter, r *http.Request) {
+	err := h.DBConnection.Ping()
+	if err == nil {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
