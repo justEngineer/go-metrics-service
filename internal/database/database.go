@@ -3,29 +3,35 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
+
+	"database/sql"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"embed"
+
+	"github.com/cenkalti/backoff"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	"github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 type Database struct {
 	Connections *pgxpool.Pool
+	mainContext *context.Context
 }
 
-const (
-	createTablesSQL = `
-	CREATE TABLE IF NOT EXISTS gauge_metrics (
-		id      TEXT PRIMARY KEY,
-		value   DOUBLE PRECISION NOT NULL
-	);
-	CREATE TABLE IF NOT EXISTS counter_metrics (
-		id      TEXT PRIMARY KEY,
-		value   BIGSERIAL NOT NULL
-	);`
+//go:embed migrations/*.sql
+var migrationSQL embed.FS
 
+const migrationsDir = "migrations"
+
+const (
 	insertGaugeSQL = `INSERT INTO
 		gauge_metrics (id, value)
 	VALUES ($1, $2)
@@ -45,22 +51,49 @@ const (
 
 // Получаем одно соединение для базы данных
 func NewConnection(ctx context.Context, cfg *config.ServerConfig) (*Database, error) {
-	//	connect, err := sql.Open("pgx", cfg.DBConnection)
 	connect, err := pgxpool.New(ctx, cfg.DBConnection)
-	db := Database{Connections: connect}
+	db := Database{Connections: connect, mainContext: &ctx}
 	if err != nil {
 		return &db, err
+	} else {
+		err = db.applyMigrations(cfg)
 	}
-	//connect, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	_, err = connect.Exec(ctx, createTablesSQL)
 	return &db, err
 }
 
+// ApplyMigrations применяет миграции к базе данных.
+func (d *Database) applyMigrations(cfg *config.ServerConfig) error {
+	srcDriver, err := iofs.New(migrationSQL, migrationsDir)
+	if err != nil {
+		return fmt.Errorf("unable to apply db migrations: %v", err)
+	}
+	// Создаем экземпляр драйвера базы данных для PostgreSQL.
+	db, err := sql.Open("postgres", cfg.DBConnection)
+	if err != nil {
+		return fmt.Errorf("unable to create db driver: %v", err)
+	}
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("unable to create db instance: %v", err)
+	}
+	// Создаем новый экземпляр мигратора с использованием драйвера источника и драйвера базы данных PostgreSQL.
+	migrator, err := migrate.NewWithInstance("migration_embedded_sql_files", srcDriver, "psql_db", driver)
+	if err != nil {
+		return fmt.Errorf("unable to create migration: %v", err)
+	}
+	// Закрываем мигратор в конце работы функции.
+	defer migrator.Close()
+	// Применяем миграции.
+	if err = migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("unable to apply migrations %v", err)
+	}
+	return nil
+}
+
 func (d *Database) Ping() error {
-	// ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	// defer cancel()
-	// err := d.Connections.Ping(ctx)
-	err := d.Connections.Ping(context.Background())
+	ctx, cancel := context.WithTimeout(*d.mainContext, 1*time.Second)
+	defer cancel()
+	err := d.Connections.Ping(ctx)
 	if err != nil {
 		return err
 	}
@@ -68,65 +101,99 @@ func (d *Database) Ping() error {
 }
 
 func (d *Database) SetGaugeMetric(ctx context.Context, key string, value float64) error {
-	if _, err := d.Connections.Exec(ctx, insertGaugeSQL, key, value); err != nil {
-		return err
+	f := func() error {
+		if _, err := d.Connections.Exec(ctx, insertGaugeSQL, key, value); err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
+	err := executeWithBackoff(f)
+	return err
 }
 
 func (d *Database) SetCounterMetric(ctx context.Context, key string, value int64) error {
-	if _, err := d.Connections.Exec(ctx, insertCounterSQL, key, value); err != nil {
-		return err
+	f := func() error {
+		if _, err := d.Connections.Exec(ctx, insertCounterSQL, key, value); err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
+	err := executeWithBackoff(f)
+	return err
 }
 
 func (d *Database) GetGaugeMetric(ctx context.Context, key string) (float64, error) {
-	var result float64
-	row := d.Connections.QueryRow(ctx, selectGaugeSQL, key)
-	if err := row.Scan(&result); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, errors.New("gauge metric is not found")
+	var value float64 = 0
+	f := func() error {
+		var result float64
+		row := d.Connections.QueryRow(ctx, selectGaugeSQL, key)
+		if err := row.Scan(&result); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return errors.New("gauge metric is not found")
+			}
+			return err
 		}
-		return 0, err
+		value = result
+		return nil
 	}
-	return result, nil
+	err := executeWithBackoff(f)
+	return value, err
 }
 
 func (d *Database) GetCounterMetric(ctx context.Context, key string) (int64, error) {
-	var result int64
-	row := d.Connections.QueryRow(ctx, selectCounterSQL, key)
-	if err := row.Scan(&result); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, errors.New("counter metric is not found")
+	var value int64 = 0
+	f := func() error {
+		var result int64
+		row := d.Connections.QueryRow(ctx, selectCounterSQL, key)
+		if err := row.Scan(&result); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return errors.New("counter metric is not found")
+			}
+			return err
 		}
-		return 0, err
+		value = result
+		return nil
 	}
-	return result, nil
+	err := executeWithBackoff(f)
+	return value, err
 }
 
 func (d *Database) SetMetricsBatch(ctx context.Context, gaugesBatch []storage.GaugeMetric, countersBatch []storage.CounterMetric) error {
-	tx, err := d.Connections.BeginTx(ctx, pgx.TxOptions{})
+	f := func() error {
+		tx, err := d.Connections.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return err
+		}
+		for _, gaugeMetric := range gaugesBatch {
+			if _, err := tx.Exec(ctx, insertGaugeSQL, gaugeMetric.Name, gaugeMetric.Value); err != nil {
+				errRollback := tx.Rollback(ctx)
+				if errRollback != nil {
+					return errRollback
+				}
+				return err
+			}
+		}
+		for _, counterMetric := range countersBatch {
+			if _, err := tx.Exec(ctx, insertCounterSQL, counterMetric.Name, counterMetric.Value); err != nil {
+				errRollback := tx.Rollback(ctx)
+				if errRollback != nil {
+					return errRollback
+				}
+				return err
+			}
+		}
+		return tx.Commit(ctx)
+	}
+	return executeWithBackoff(f)
+}
+
+func executeWithBackoff(f func() error) error {
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.MaxElapsedTime = 3 * time.Second
+	expBackoff.RandomizationFactor = 0
+	err := backoff.Retry(f, expBackoff)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to database after retrying: %v", err)
 	}
-	for _, gaugeMetric := range gaugesBatch {
-		if _, err := tx.Exec(ctx, insertGaugeSQL, gaugeMetric.Name, gaugeMetric.Value); err != nil {
-			errRollback := tx.Rollback(ctx)
-			if errRollback != nil {
-				return errRollback
-			}
-			return err
-		}
-	}
-	for _, counterMetric := range countersBatch {
-		if _, err := tx.Exec(ctx, insertCounterSQL, counterMetric.Name, counterMetric.Value); err != nil {
-			errRollback := tx.Rollback(ctx)
-			if errRollback != nil {
-				return errRollback
-			}
-			return err
-		}
-	}
-	return tx.Commit(ctx)
+	return err
 }
