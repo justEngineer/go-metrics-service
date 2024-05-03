@@ -14,6 +14,7 @@ type ServerConfig struct {
 	FileStorePath string
 	Restore       bool
 	DBConnection  string
+	SHA256Key     string
 }
 
 func Parse() ServerConfig {
@@ -25,6 +26,7 @@ func Parse() ServerConfig {
 	flag.BoolVar(&cfg.Restore, "r", true, "restore file")
 	//flag.StringVar(&cfg.DBConnection, "d", "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable", "postgres database connection string")
 	flag.StringVar(&cfg.DBConnection, "d", "", "postgres database connection string")
+	flag.StringVar(&cfg.SHA256Key, "k", "", "SHA256 key")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
 		cfg.Endpoint = res
@@ -53,6 +55,9 @@ func Parse() ServerConfig {
 	}
 	if res := os.Getenv("DATABASE_DSN"); res != "" {
 		cfg.DBConnection = res
+	}
+	if res := os.Getenv("KEY"); res != "" {
+		cfg.SHA256Key = res
 	}
 	return cfg
 }

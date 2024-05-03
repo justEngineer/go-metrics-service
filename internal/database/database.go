@@ -129,7 +129,7 @@ func (d *Database) GetGaugeMetric(ctx context.Context, key string) (float64, err
 		row := d.Connections.QueryRow(ctx, selectGaugeSQL, key)
 		if err := row.Scan(&result); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return errors.New("gauge metric is not found")
+				return fmt.Errorf("gauge metric is not found: %w, id: %v", err, key)
 			}
 			return err
 		}
@@ -147,7 +147,7 @@ func (d *Database) GetCounterMetric(ctx context.Context, key string) (int64, err
 		row := d.Connections.QueryRow(ctx, selectCounterSQL, key)
 		if err := row.Scan(&result); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return errors.New("counter metric is not found")
+				return fmt.Errorf("counter metric is not found: %w, id: %v", err, key)
 			}
 			return err
 		}

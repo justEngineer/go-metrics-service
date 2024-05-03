@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"math/rand"
 	"net/http"
@@ -9,11 +10,13 @@ import (
 	"time"
 
 	"context"
+	"fmt"
 
 	"compress/gzip"
 
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
+	security "github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 	"go.uber.org/zap"
 )
@@ -74,7 +77,7 @@ func (h *Handler) GetMetrics(ctx context.Context) {
 	}
 }
 
-func (h *Handler) sendRequest(metric model.Metrics, url *string, client *http.Client) error {
+func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.Client) error {
 	body, err := json.Marshal(metric)
 	if err != nil {
 		panic(err)
@@ -97,6 +100,14 @@ func (h *Handler) sendRequest(metric model.Metrics, url *string, client *http.Cl
 	request.Header.Add("Content-Type", "application/json")
 	request.Header.Set("Accept-Encoding", "gzip")
 	request.Header.Set("Content-Encoding", "gzip")
+	if h.config.SHA256Key != "" {
+		signedBody, err := security.AddSign(body, h.config.SHA256Key)
+		if err != nil {
+			return fmt.Errorf("error while adding SHA256 sign: %w", err)
+		}
+		request.Header.Set(security.HashHeader, hex.EncodeToString(signedBody))
+	}
+	request.Close = true
 	response, err := client.Do(request)
 	if err != nil {
 		h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
@@ -106,27 +117,24 @@ func (h *Handler) sendRequest(metric model.Metrics, url *string, client *http.Cl
 	return nil
 }
 
-func (h *Handler) SendMetrics(ctx context.Context) {
+func (h *Handler) SendMetrics(ctx context.Context, client *http.Client) {
 	sendTicker := time.NewTicker(time.Duration(h.config.reportInterval) * time.Second)
 	defer sendTicker.Stop()
-
-	client := http.Client{Timeout: time.Second * 1}
-	url := "http://" + h.config.endpoint + "/update/"
+	url := "http://" + h.config.endpoint + "/updates/"
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-sendTicker.C:
 			h.storage.Mutex.Lock()
+			var metricsBatch []model.Metrics
 			for id, value := range h.storage.Gauge {
 				metric := model.Metrics{
 					ID:    id,
 					MType: "gauge",
 					Value: &value,
 				}
-				if h.sendRequest(metric, &url, &client) != nil {
-					break
-				}
+				metricsBatch = append(metricsBatch, metric)
 			}
 			for id, value := range h.storage.Counter {
 				metric := model.Metrics{
@@ -134,9 +142,11 @@ func (h *Handler) SendMetrics(ctx context.Context) {
 					MType: "counter",
 					Delta: &value,
 				}
-				if h.sendRequest(metric, &url, &client) != nil {
-					break
-				}
+				metricsBatch = append(metricsBatch, metric)
+			}
+			err := h.sendRequest(metricsBatch, &url, client)
+			if err != nil {
+				h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
 			}
 			h.storage.Mutex.Unlock()
 		}

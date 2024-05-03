@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -36,7 +37,8 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ClientHandler.SendMetrics(ctx)
+		client := http.Client{}
+		ClientHandler.SendMetrics(ctx, &client)
 		stop()
 	}()
 	wg.Wait()

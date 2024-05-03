@@ -12,6 +12,7 @@ type ClientConfig struct {
 	reportInterval uint64
 	pollInterval   uint64
 	LogLevel       string
+	SHA256Key      string
 }
 
 func Parse() ClientConfig {
@@ -20,6 +21,7 @@ func Parse() ClientConfig {
 	flag.Uint64Var(&cfg.reportInterval, "r", 10, "update notification sending interval")
 	flag.Uint64Var(&cfg.pollInterval, "p", 2, "polling stats interval")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.SHA256Key, "k", "", "SHA256 key")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
 		cfg.endpoint = res
@@ -40,6 +42,9 @@ func Parse() ClientConfig {
 			log.Fatal(err)
 		}
 		cfg.pollInterval = uint64(res)
+	}
+	if res := os.Getenv("KEY"); res != "" {
+		cfg.SHA256Key = res
 	}
 	return cfg
 }

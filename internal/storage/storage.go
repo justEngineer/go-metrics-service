@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -55,7 +55,7 @@ func (s *MemStorage) GetAllMetrics() MetricsDump {
 func (s *MemStorage) GetGaugeMetric(ctx context.Context, id string) (float64, error) {
 	val, ok := s.Gauge[id]
 	if !ok {
-		return 0.0, errors.New("gauge metric is not found")
+		return 0.0, fmt.Errorf("gauge metric is not found, id: %v", id)
 	} else {
 		return val, nil
 	}
@@ -64,7 +64,7 @@ func (s *MemStorage) GetGaugeMetric(ctx context.Context, id string) (float64, er
 func (s *MemStorage) GetCounterMetric(ctx context.Context, id string) (int64, error) {
 	val, ok := s.Counter[id]
 	if !ok {
-		return 0.0, errors.New("counter metric is not found")
+		return 0.0, fmt.Errorf("counter metric is not found, id: %v", id)
 	} else {
 		return val, nil
 	}

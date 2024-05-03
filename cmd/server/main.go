@@ -18,6 +18,7 @@ import (
 	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
+	security "github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
@@ -42,6 +43,9 @@ func main() {
 	r.Use(appLogger.RequestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(compression.GzipMiddleware)
+	if cfg.SHA256Key != "" {
+		r.Use(security.New(cfg.SHA256Key))
+	}
 	r.Post("/update/{type}/{name}/{value}", ServerHandler.UpdateMetric)
 	r.Get("/value/{type}/{name}", ServerHandler.GetMetric)
 	r.Get("/", ServerHandler.MainPage)
