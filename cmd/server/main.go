@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -50,7 +51,7 @@ func main() {
 	r.Get("/value/{type}/{name}", ServerHandler.GetMetric)
 	r.Get("/", ServerHandler.MainPage)
 	r.Post("/update/", ServerHandler.UpdateMetricFromJSON)
-	r.Post("/updates/", ServerHandler.UpdateMetricsFromBatch)
+	r.Post("/updates/", server.TimeoutMiddleware(time.Second, ServerHandler.UpdateMetricsFromBatch))
 	r.Post("/value/", ServerHandler.GetMetricAsJSON)
 	r.Get("/ping", ServerHandler.CheckDBConnection)
 

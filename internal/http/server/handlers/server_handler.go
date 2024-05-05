@@ -42,6 +42,20 @@ type Handler struct {
 	DBConnection *database.Database
 }
 
+func TimeoutMiddleware(timeout time.Duration, next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer func() {
+			cancel()
+			if ctx.Err() == context.DeadlineExceeded {
+				w.WriteHeader(http.StatusGatewayTimeout)
+			}
+		}()
+		r = r.WithContext(ctx)
+		next(w, r)
+	}
+}
+
 func New(metricsService *storage.MemStorage, config *config.ServerConfig, log *logger.Logger, conn *database.Database) *Handler {
 	if config.DBConnection == "" {
 		return &Handler{metricsService, config, log, conn}
@@ -176,7 +190,7 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
-		h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		h.appLogger.Log.Error("Error parsing request body as JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -185,7 +199,7 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			requestedMetric.Value = &val
 		} else {
-			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			h.appLogger.Log.Error("Error parsing request body as JSON", zap.Error(err))
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -194,7 +208,7 @@ func (h *Handler) GetMetricAsJSON(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			requestedMetric.Delta = &val
 		} else {
-			h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+			h.appLogger.Log.Error("Error parsing request body as JSON", zap.Error(err))
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -228,7 +242,7 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = json.Unmarshal(buffer.Bytes(), &requestedMetric); err != nil {
-		h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		h.appLogger.Log.Error("Error parsing request body as JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -278,13 +292,10 @@ func (h *Handler) CheckDBConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateMetricsFromBatch(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
 	var metrics []*models.Metrics
 	err := json.NewDecoder(r.Body).Decode(&metrics)
 	if err != nil {
-		h.appLogger.Log.Warn("Error parsing request body as JSON", zap.Error(err))
+		h.appLogger.Log.Error("Error parsing request body as JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -301,7 +312,7 @@ func (h *Handler) UpdateMetricsFromBatch(w http.ResponseWriter, r *http.Request)
 			h.appLogger.Log.Warn("Unkniwn metrict type")
 		}
 	}
-	err = h.storage.SetMetricsBatch(ctx, gaugeMetrics, counterMetrics)
+	err = h.storage.SetMetricsBatch(r.Context(), gaugeMetrics, counterMetrics)
 	if err != nil {
 		h.appLogger.Log.Warn("Error while updating metrics from batch", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)

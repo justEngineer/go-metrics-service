@@ -14,10 +14,13 @@ import (
 
 	"compress/gzip"
 
+	async "github.com/justEngineer/go-metrics-service/internal/async"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
 	security "github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"go.uber.org/zap"
 )
 
@@ -72,12 +75,13 @@ func (h *Handler) GetMetrics(ctx context.Context) {
 			h.storage.Gauge["RandomValue"] = float64(rand.Float64() * 100)
 
 			h.storage.Counter["PollCount"] += 1
+			h.GetAdditionalMetrics()
 			h.storage.Mutex.Unlock()
 		}
 	}
 }
 
-func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.Client) error {
+func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.Client, limiter *async.Semaphore) error {
 	body, err := json.Marshal(metric)
 	if err != nil {
 		panic(err)
@@ -108,6 +112,10 @@ func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.
 		request.Header.Set(security.HashHeader, hex.EncodeToString(signedBody))
 	}
 	request.Close = true
+	if limiter != nil {
+		limiter.Acquire()
+		defer limiter.Release()
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
@@ -117,7 +125,7 @@ func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.
 	return nil
 }
 
-func (h *Handler) SendMetrics(ctx context.Context, client *http.Client) {
+func (h *Handler) SendMetrics(ctx context.Context, client *http.Client, limiter *async.Semaphore) {
 	sendTicker := time.NewTicker(time.Duration(h.config.reportInterval) * time.Second)
 	defer sendTicker.Stop()
 	url := "http://" + h.config.endpoint + "/updates/"
@@ -144,11 +152,28 @@ func (h *Handler) SendMetrics(ctx context.Context, client *http.Client) {
 				}
 				metricsBatch = append(metricsBatch, metric)
 			}
-			err := h.sendRequest(metricsBatch, &url, client)
+			err := h.sendRequest(metricsBatch, &url, client, limiter)
 			if err != nil {
 				h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
 			}
 			h.storage.Mutex.Unlock()
 		}
 	}
+}
+
+func (h *Handler) GetAdditionalMetrics() {
+	cpuPercents, err := cpu.Percent(0, true)
+	if err != nil {
+		h.appLogger.Log.Info("getting CPU percentage failed", zap.String("error", err.Error()))
+		return
+	}
+	h.storage.Gauge["CPUtilization1"] = float64(cpuPercents[1])
+
+	v, err := mem.SwapMemory()
+	if err != nil {
+		h.appLogger.Log.Info("getting swap memory metrics failed", zap.String("error", err.Error()))
+		return
+	}
+	h.storage.Gauge["TotalMemory"] = float64(v.Total / (1024 * 1024))
+	h.storage.Gauge["FreeMemory"] = float64(v.Free / (1024 * 1024))
 }
