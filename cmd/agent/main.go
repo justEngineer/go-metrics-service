@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	async "github.com/justEngineer/go-metrics-service/internal/async"
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
@@ -34,9 +36,11 @@ func main() {
 		stop()
 	}()
 	wg.Add(1)
+	requestLimiter := async.NewSemaphore(int(config.RateLimit))
 	go func() {
 		defer wg.Done()
-		ClientHandler.SendMetrics(ctx)
+		client := http.Client{}
+		ClientHandler.SendMetrics(ctx, &client, requestLimiter)
 		stop()
 	}()
 	wg.Wait()
