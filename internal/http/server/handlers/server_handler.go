@@ -1,3 +1,4 @@
+// Package server предназначен для обработки API запросов на сервере.
 package server
 
 import (
@@ -27,6 +28,7 @@ import (
 //go:embed main_page_html.tmpl
 var mainPageTemplateFile string
 
+// Storage интерфейс определяет методы, которые должны быть реализованы для работы с метриками.
 type Storage interface {
 	GetGaugeMetric(ctx context.Context, key string) (float64, error)
 	GetCounterMetric(ctx context.Context, key string) (int64, error)
@@ -56,6 +58,7 @@ func TimeoutMiddleware(timeout time.Duration, next func(w http.ResponseWriter, r
 	}
 }
 
+// New создает новый экземпляр Handler.
 func New(metricsService *storage.MemStorage, config *config.ServerConfig, log *logger.Logger, conn *database.Database) *Handler {
 	if config.DBConnection == "" {
 		return &Handler{metricsService, config, log, conn}

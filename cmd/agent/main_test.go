@@ -34,7 +34,7 @@ func TestGetMetrics(t *testing.T) {
 	}()
 	go ClientHandler.GetMetrics(ctx)
 	time.Sleep(time.Second * 3)
-	MetricStorage.Mutex.Lock()
-	defer MetricStorage.Mutex.Unlock()
+	MetricStorage.Mutex.RLock()
+	defer MetricStorage.Mutex.RUnlock()
 	assert.Equal(t, int64(1), MetricStorage.Counter["PollCount"], "Количество запросов метрик совпадает с ожидаемым")
 }
