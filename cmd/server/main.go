@@ -18,6 +18,7 @@ import (
 	compression "github.com/justEngineer/go-metrics-service/internal/gzip"
 	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
 	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
+	profiler "github.com/justEngineer/go-metrics-service/internal/http/server/profiler"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	security "github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
@@ -47,6 +48,7 @@ func main() {
 	if cfg.SHA256Key != "" {
 		r.Use(security.New(cfg.SHA256Key))
 	}
+	r.Mount("/debug", profiler.Profiler())
 	r.Post("/update/{type}/{name}/{value}", ServerHandler.UpdateMetric)
 	r.Get("/value/{type}/{name}", ServerHandler.GetMetric)
 	r.Get("/", ServerHandler.MainPage)
