@@ -7,16 +7,18 @@ import (
 	"strconv"
 )
 
+// ServerConfig содержит конфигурацию для сервера.
 type ServerConfig struct {
-	Endpoint      string
-	LogLevel      string
-	StoreInterval int
-	FileStorePath string
-	Restore       bool
-	DBConnection  string
-	SHA256Key     string
+	Endpoint      string // URL-адрес конечной точки сервера
+	LogLevel      string // Уровень логирования
+	StoreInterval int    // Интервал сохранения данных
+	FileStorePath string // Пуь к файлу с архивом хранения данных
+	Restore       bool   // Флаг восстановления данных из архива
+	DBConnection  string // Строка подключения к базе данных
+	SHA256Key     string // Ключ для подписи данных
 }
 
+// Parse функция чтения конфигурации
 func Parse() ServerConfig {
 	var cfg ServerConfig
 	flag.StringVar(&cfg.Endpoint, "a", "localhost:8080", "server host/port")

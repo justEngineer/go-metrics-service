@@ -1,3 +1,4 @@
+// Package async предоставляет утилитные функции и структуры, используемые для многопоточности.
 package async
 
 // Semaphore структура семафора
@@ -16,12 +17,12 @@ func NewSemaphore(maxReq int) *Semaphore {
 	}
 }
 
-// когда горутина запускается, отправляем пустую структуру в канал semaCh
+// Acquire отправляет пустую структуру в канал
 func (s *Semaphore) Acquire() {
 	s.semaCh <- struct{}{}
 }
 
-// когда горутина завершается, из канала semaCh убирается пустая структура
+// Release получает пустую структуру из канала
 func (s *Semaphore) Release() {
 	<-s.semaCh
 }

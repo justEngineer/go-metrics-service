@@ -35,6 +35,7 @@ func New() *MemStorage {
 	return MetricStorage
 }
 
+// GetGaugeMetric извлекает все метрики из хранилища.
 func (s *MemStorage) GetAllMetrics() MetricsDump {
 	var gauges []GaugeMetric
 	var counters []CounterMetric
@@ -52,6 +53,7 @@ func (s *MemStorage) GetAllMetrics() MetricsDump {
 	}
 }
 
+// GetGaugeMetric извлекает метрику типа gauge из хранилища.
 func (s *MemStorage) GetGaugeMetric(ctx context.Context, id string) (float64, error) {
 	val, ok := s.Gauge[id]
 	if !ok {
@@ -61,6 +63,7 @@ func (s *MemStorage) GetGaugeMetric(ctx context.Context, id string) (float64, er
 	}
 }
 
+// GetCounterMetric извлекает метрику типа counter из хранилища.
 func (s *MemStorage) GetCounterMetric(ctx context.Context, id string) (int64, error) {
 	val, ok := s.Counter[id]
 	if !ok {

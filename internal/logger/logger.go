@@ -1,3 +1,4 @@
+// Package logger предназначен для логирования запросов и ответов.
 package logger
 
 import (
@@ -9,7 +10,7 @@ import (
 )
 
 type (
-	// берём структуру для хранения сведений об ответе
+	// responseData содержит данные о HTTP ответе.
 	responseData struct {
 		status int
 		size   int
@@ -22,6 +23,7 @@ type (
 	}
 )
 
+// loggingResponseWriter реализует интерфейс http.ResponseWriter для перехвата и логирования ответов.
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	// записываем ответ, используя оригинальный http.ResponseWriter
 	size, err := r.ResponseWriter.Write(b)
@@ -29,16 +31,19 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+// WriteHeader переопределяет метод WriteHeader интерфейса http.ResponseWriter для записи статус кода.
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	// записываем код статуса, используя оригинальный http.ResponseWriter
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode // захватываем код статуса
 }
 
+// Log предоставляет глобальный доступ к логгеру zap.Logger
 type Logger struct {
 	Log *zap.Logger
 }
 
+// New создает логгер.
 func New(level string) (*Logger, error) {
 	logger := &Logger{}
 	// преобразуем текстовый уровень логирования в zap.AtomicLevel
@@ -60,6 +65,7 @@ func New(level string) (*Logger, error) {
 	return logger, nil
 }
 
+// RequestLogger является middleware для логирования HTTP запросов и ответов.
 func (l *Logger) RequestLogger(h http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		// функция Now() возвращает текущее время
