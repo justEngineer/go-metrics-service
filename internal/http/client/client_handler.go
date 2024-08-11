@@ -113,8 +113,8 @@ func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.
 	}
 	request.Close = true
 	if limiter != nil {
-		limiter.Acquire()
-		defer limiter.Release()
+		limiter.Wait()
+		defer limiter.Signal()
 	}
 	response, err := client.Do(request)
 	if err != nil {
@@ -134,7 +134,7 @@ func (h *Handler) SendMetrics(ctx context.Context, client *http.Client, limiter 
 		case <-ctx.Done():
 			return
 		case <-sendTicker.C:
-			h.storage.Mutex.Lock()
+			h.storage.Mutex.RLock()
 			var metricsBatch []model.Metrics
 			for id, value := range h.storage.Gauge {
 				metric := model.Metrics{
@@ -156,7 +156,7 @@ func (h *Handler) SendMetrics(ctx context.Context, client *http.Client, limiter 
 			if err != nil {
 				h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
 			}
-			h.storage.Mutex.Unlock()
+			h.storage.Mutex.RUnlock()
 		}
 	}
 }

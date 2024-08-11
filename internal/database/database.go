@@ -21,6 +21,7 @@ import (
 	"github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
+// Database предоставляет методы для БД.
 type Database struct {
 	Connections *pgxpool.Pool
 	mainContext *context.Context
@@ -31,6 +32,7 @@ var migrationSQL embed.FS
 
 const migrationsDir = "migrations"
 
+// Запросы для вставки метрик в базу данных с обработкой конфликтов.
 const (
 	insertGaugeSQL = `INSERT INTO
 		gauge_metrics (id, value)
@@ -90,6 +92,7 @@ func (d *Database) applyMigrations(cfg *config.ServerConfig) error {
 	return nil
 }
 
+// Ping прверяет наличие связи с БД
 func (d *Database) Ping() error {
 	ctx, cancel := context.WithTimeout(*d.mainContext, 1*time.Second)
 	defer cancel()
@@ -100,6 +103,7 @@ func (d *Database) Ping() error {
 	return nil
 }
 
+// SetGaugeMetric добавляет Gauge-метрику в хранилище и выполняет бэкап данных при необходимости.
 func (d *Database) SetGaugeMetric(ctx context.Context, key string, value float64) error {
 	f := func() error {
 		if _, err := d.Connections.Exec(ctx, insertGaugeSQL, key, value); err != nil {
@@ -111,6 +115,7 @@ func (d *Database) SetGaugeMetric(ctx context.Context, key string, value float64
 	return err
 }
 
+// SetCounterMetric добавляет Counter-метрику в хранилище и выполняет бэкап данных при необходимости.
 func (d *Database) SetCounterMetric(ctx context.Context, key string, value int64) error {
 	f := func() error {
 		if _, err := d.Connections.Exec(ctx, insertCounterSQL, key, value); err != nil {
@@ -122,6 +127,7 @@ func (d *Database) SetCounterMetric(ctx context.Context, key string, value int64
 	return err
 }
 
+// GetGaugeMetric извлекает метрику типа gauge из хранилища.
 func (d *Database) GetGaugeMetric(ctx context.Context, key string) (float64, error) {
 	var value float64 = 0
 	f := func() error {
@@ -140,6 +146,7 @@ func (d *Database) GetGaugeMetric(ctx context.Context, key string) (float64, err
 	return value, err
 }
 
+// GetCounterMetric извлекает метрику типа counter из хранилища.
 func (d *Database) GetCounterMetric(ctx context.Context, key string) (int64, error) {
 	var value int64 = 0
 	f := func() error {
@@ -158,6 +165,7 @@ func (d *Database) GetCounterMetric(ctx context.Context, key string) (int64, err
 	return value, err
 }
 
+// SetMetricsBatch добавляет несколько метрик в хранилище и выполняет бэкап данных при необходимости.
 func (d *Database) SetMetricsBatch(ctx context.Context, gaugesBatch []storage.GaugeMetric, countersBatch []storage.CounterMetric) error {
 	f := func() error {
 		tx, err := d.Connections.BeginTx(ctx, pgx.TxOptions{})
@@ -187,6 +195,7 @@ func (d *Database) SetMetricsBatch(ctx context.Context, gaugesBatch []storage.Ga
 	return executeWithBackoff(f)
 }
 
+// executeWithBackoff выполняет операцию несколько раз с интервалом
 func executeWithBackoff(f func() error) error {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxElapsedTime = 3 * time.Second

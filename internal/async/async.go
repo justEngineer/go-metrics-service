@@ -1,6 +1,14 @@
+// Package async предоставляет утилитные функции и структуры, используемые для многопоточности.
 package async
 
-// Semaphore структура семафора
+// Semaphore реализует простой семафор для ограничения количества одновременных запросов.
+//
+// Пример использования:
+//
+//	sem := NewSemaphore(10)
+//	sem.Acquire()
+//	defer sem.Release()
+//	// Выполнение работы
 type Semaphore struct {
 	semaCh chan struct{}
 }
@@ -16,12 +24,12 @@ func NewSemaphore(maxReq int) *Semaphore {
 	}
 }
 
-// когда горутина запускается, отправляем пустую структуру в канал semaCh
-func (s *Semaphore) Acquire() {
+// Wait отправляет пустую структуру в канал
+func (s *Semaphore) Wait() {
 	s.semaCh <- struct{}{}
 }
 
-// когда горутина завершается, из канала semaCh убирается пустая структура
-func (s *Semaphore) Release() {
+// Signal получает пустую структуру из канала
+func (s *Semaphore) Signal() {
 	<-s.semaCh
 }

@@ -1,3 +1,4 @@
+// Package filestorage предоставляет реализацию хранилища данных, использующего файловую систему для сохранения и восстановления метрик.
 package filestorage
 
 import (
@@ -13,11 +14,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// FileStorage реализует интерфейс Storage, предоставляя методы для работы с метриками, хранящимися в файле.
 type FileStorage struct {
 	storage *storage.MemStorage
 	config  *config.ServerConfig
 }
 
+// SaveDumpToFile реализует интерфейс для сохранения данных в файле.
 func (fs FileStorage) SaveDumpToFile() error {
 	rawData := fs.storage.GetAllMetrics()
 	jsonData, err := json.Marshal(rawData)
@@ -31,6 +34,7 @@ func (fs FileStorage) SaveDumpToFile() error {
 	return nil
 }
 
+// New создает новый экземпляр FileStorage.
 func New(metricStorage *storage.MemStorage, config *config.ServerConfig, ctx context.Context, logger *logger.Logger) *FileStorage {
 	if config.FileStorePath == "" {
 		return nil
