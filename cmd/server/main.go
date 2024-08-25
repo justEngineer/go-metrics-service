@@ -39,8 +39,8 @@ func main() {
 	ServerHandler := server.New(MetricStorage, &cfg, appLogger, dbConnecton)
 
 	router := chi.NewRouter()
-	routing.SetMiddlewares(router, appLogger, &cfg.SHA256Key)
-	routing.SetRequestRouting(router, ServerHandler)
+	routing.SetMiddlewares(router, appLogger, &cfg.SHA256Key, cfg.PrivateCryptoKey)
+	routing.SetRequestRouting(router, ServerHandler, cfg.PrivateCryptoKey)
 
 	port := strings.Split(cfg.Endpoint, ":")
 	log.Fatal(http.ListenAndServe(":"+port[1], router))

@@ -1,28 +1,34 @@
 package client
 
 import (
+	"crypto/rsa"
 	"flag"
 	"log"
 	"os"
 	"strconv"
+
+	security "github.com/justEngineer/go-metrics-service/internal/security"
 )
 
 type ClientConfig struct {
-	endpoint       string
-	reportInterval uint64
-	pollInterval   uint64
-	LogLevel       string
-	SHA256Key      string
-	RateLimit      uint64
+	endpoint        string
+	reportInterval  uint64
+	pollInterval    uint64
+	LogLevel        string
+	SHA256Key       string
+	RateLimit       uint64
+	PublicCryptoKey *rsa.PublicKey // Ключ для шифрования данных
 }
 
 func Parse() ClientConfig {
 	var cfg ClientConfig
+	var publicKeyPath string
 	flag.StringVar(&cfg.endpoint, "a", "localhost:8080", "server host/port")
 	flag.Uint64Var(&cfg.reportInterval, "r", 10, "update notification sending interval")
 	flag.Uint64Var(&cfg.pollInterval, "p", 2, "polling stats interval")
 	flag.StringVar(&cfg.LogLevel, "lg", "info", "log level")
 	flag.StringVar(&cfg.SHA256Key, "k", "", "SHA256 key")
+	flag.StringVar(&publicKeyPath, "crypto-key", "", "path to the public encryption key")
 	flag.Uint64Var(&cfg.RateLimit, "l", 1, "max rate limit of outgoing requests")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
@@ -54,6 +60,16 @@ func Parse() ClientConfig {
 			log.Fatal(err)
 		}
 		cfg.RateLimit = uint64(value)
+	}
+	if cryptoKeyEnv := os.Getenv("CRYPTO_KEY"); cryptoKeyEnv != "" {
+		publicKeyPath = cryptoKeyEnv
+	}
+	if publicKeyPath != "" {
+		var err error
+		cfg.PublicCryptoKey, err = security.GetPublicKey(publicKeyPath)
+		if err != nil {
+			log.Fatalf("RSA private key read error:%s", err)
+		}
 	}
 	return cfg
 }

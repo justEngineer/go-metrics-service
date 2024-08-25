@@ -11,6 +11,7 @@ import (
 	async "github.com/justEngineer/go-metrics-service/internal/async"
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
+	"github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
@@ -21,6 +22,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
+
 	ClientHandler := client.New(MetricStorage, &config, appLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(),
@@ -39,7 +41,11 @@ func main() {
 	requestLimiter := async.NewSemaphore(int(config.RateLimit))
 	go func() {
 		defer wg.Done()
-		client := http.Client{}
+		client := http.Client{
+			Transport: security.EncryptionMiddleware{
+				Proxied:   http.DefaultTransport,
+				PublicKey: config.PublicCryptoKey,
+			}}
 		ClientHandler.SendMetrics(ctx, &client, requestLimiter)
 		stop()
 	}()

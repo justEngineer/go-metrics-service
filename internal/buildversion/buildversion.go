@@ -3,7 +3,7 @@ package buildversion
 
 import "fmt"
 
-var (
+const (
 	BuildVersion = "NA"
 	BuildDate    = "N/A"
 	BuildCommit  = "N/A"
