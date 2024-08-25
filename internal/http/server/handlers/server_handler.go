@@ -38,10 +38,10 @@ type Storage interface {
 }
 
 type Handler struct {
-	storage      Storage
-	config       *config.ServerConfig
-	appLogger    *logger.Logger
-	DBConnection *database.Database
+	storage     Storage
+	config      *config.ServerConfig
+	appLogger   *logger.Logger
+	DatabaseDSN *database.Database
 }
 
 func TimeoutMiddleware(timeout time.Duration, next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func TimeoutMiddleware(timeout time.Duration, next func(w http.ResponseWriter, r
 
 // New создает новый экземпляр Handler.
 func New(metricsService *storage.MemStorage, config *config.ServerConfig, log *logger.Logger, conn *database.Database) *Handler {
-	if config.DBConnection == "" {
+	if config.DatabaseDSN == "" {
 		return &Handler{metricsService, config, log, conn}
 	} else {
 		return &Handler{conn, config, log, conn}
@@ -286,7 +286,7 @@ func (h *Handler) UpdateMetricFromJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CheckDBConnection(w http.ResponseWriter, r *http.Request) {
-	err := h.DBConnection.Ping()
+	err := h.DatabaseDSN.Ping()
 	if err == nil {
 		w.WriteHeader(http.StatusOK)
 	} else {

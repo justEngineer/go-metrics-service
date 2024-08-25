@@ -53,7 +53,7 @@ const (
 
 // Получаем одно соединение для базы данных
 func NewConnection(ctx context.Context, cfg *config.ServerConfig) (*Database, error) {
-	connect, err := pgxpool.New(ctx, cfg.DBConnection)
+	connect, err := pgxpool.New(ctx, cfg.DatabaseDSN)
 	db := Database{Connections: connect, mainContext: &ctx}
 	if err != nil {
 		return &db, err
@@ -70,7 +70,7 @@ func (d *Database) applyMigrations(cfg *config.ServerConfig) error {
 		return fmt.Errorf("unable to apply db migrations: %v", err)
 	}
 	// Создаем экземпляр драйвера базы данных для PostgreSQL.
-	db, err := sql.Open("postgres", cfg.DBConnection)
+	db, err := sql.Open("postgres", cfg.DatabaseDSN)
 	if err != nil {
 		return fmt.Errorf("unable to create db driver: %v", err)
 	}

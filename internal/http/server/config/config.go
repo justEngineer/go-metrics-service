@@ -18,7 +18,7 @@ type ServerConfig struct {
 	StoreInterval    int             `json:"store_interval"` // Интервал сохранения данных
 	FileStorePath    string          `json:"store_file"`     // Путь к файлу с архивом хранения данных
 	Restore          bool            `json:"restore"`        // Флаг восстановления данных из архива
-	DBConnection     string          `json:"database_dsn"`   // Строка подключения к базе данных
+	DatabaseDSN      string          `json:"database_dsn"`   // Строка подключения к базе данных
 	SHA256Key        string          // Ключ для подписи данных
 	PrivateCryptoKey *rsa.PrivateKey // Ключ для шифрования данных
 	PrivateKeyPath   string          `json:"crypto_key"` // Путь к файлу Ключ для шифрования данных
@@ -56,8 +56,8 @@ func Parse() ServerConfig {
 	flag.IntVar(&cfg.StoreInterval, "i", 300, "store interval file")
 	flag.StringVar(&cfg.FileStorePath, "f", "/tmp/metrics-db.json", "path file")
 	flag.BoolVar(&cfg.Restore, "r", true, "restore file")
-	//flag.StringVar(&cfg.DBConnection, "d", "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable", "postgres database connection string")
-	flag.StringVar(&cfg.DBConnection, "d", "", "postgres database connection string")
+	//flag.StringVar(&cfg.DatabaseDSN, "d", "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable", "postgres database connection string")
+	flag.StringVar(&cfg.DatabaseDSN, "d", "", "postgres database connection string")
 	flag.StringVar(&cfg.SHA256Key, "k", "", "SHA256 key")
 	flag.StringVar(&privateKeyPath, "crypto-key", "", "path to the private encryption key")
 	flag.StringVar(&configFilePath, "c", "", "path to the configuration file")
@@ -88,7 +88,7 @@ func Parse() ServerConfig {
 		}
 	}
 	if res := os.Getenv("DATABASE_DSN"); res != "" {
-		cfg.DBConnection = res
+		cfg.DatabaseDSN = res
 	}
 	if res := os.Getenv("KEY"); res != "" {
 		cfg.SHA256Key = res
@@ -124,8 +124,8 @@ func Parse() ServerConfig {
 		if !cfg.Restore {
 			cfg.Restore = fileConfig.Restore
 		}
-		if cfg.DBConnection == "" {
-			cfg.DBConnection = fileConfig.DBConnection
+		if cfg.DatabaseDSN == "" {
+			cfg.DatabaseDSN = fileConfig.DatabaseDSN
 		}
 		if cfg.PrivateKeyPath == "" {
 			cfg.PrivateKeyPath = fileConfig.PrivateKeyPath

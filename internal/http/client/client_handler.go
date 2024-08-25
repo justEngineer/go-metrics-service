@@ -28,14 +28,15 @@ type Handler struct {
 	storage   *storage.MemStorage
 	config    *ClientConfig
 	appLogger *logger.Logger
+	serverURL string
 }
 
 func New(metricsService *storage.MemStorage, config *ClientConfig, appLogger *logger.Logger) *Handler {
-	return &Handler{metricsService, config, appLogger}
+	return &Handler{metricsService, config, appLogger, "http://" + config.Endpoint + "/updates/"}
 }
 
 func (h *Handler) GetMetrics(ctx context.Context) {
-	pollTicker := time.NewTicker(time.Duration(h.config.pollInterval) * time.Second)
+	pollTicker := time.NewTicker(time.Duration(h.config.PollInterval) * time.Second)
 	defer pollTicker.Stop()
 	for {
 		select {
@@ -125,38 +126,45 @@ func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.
 	return nil
 }
 
+func (h *Handler) SendMetricsHandler(client *http.Client, limiter *async.Semaphore) {
+	h.storage.Mutex.RLock()
+	var metricsBatch []model.Metrics
+	for id, value := range h.storage.Gauge {
+		metric := model.Metrics{
+			ID:    id,
+			MType: "gauge",
+			Value: &value,
+		}
+		metricsBatch = append(metricsBatch, metric)
+	}
+	for id, value := range h.storage.Counter {
+		metric := model.Metrics{
+			ID:    id,
+			MType: "counter",
+			Delta: &value,
+		}
+		metricsBatch = append(metricsBatch, metric)
+	}
+	if len(metricsBatch) != 0 {
+		err := h.sendRequest(metricsBatch, &h.serverURL, client, limiter)
+		if err != nil {
+			h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
+		}
+
+	}
+	h.storage.Mutex.RUnlock()
+}
+
 func (h *Handler) SendMetrics(ctx context.Context, client *http.Client, limiter *async.Semaphore) {
-	sendTicker := time.NewTicker(time.Duration(h.config.reportInterval) * time.Second)
+	sendTicker := time.NewTicker(time.Duration(h.config.ReportInterval) * time.Second)
 	defer sendTicker.Stop()
-	url := "http://" + h.config.endpoint + "/updates/"
 	for {
 		select {
 		case <-ctx.Done():
+			h.SendMetricsHandler(client, limiter)
 			return
 		case <-sendTicker.C:
-			h.storage.Mutex.RLock()
-			var metricsBatch []model.Metrics
-			for id, value := range h.storage.Gauge {
-				metric := model.Metrics{
-					ID:    id,
-					MType: "gauge",
-					Value: &value,
-				}
-				metricsBatch = append(metricsBatch, metric)
-			}
-			for id, value := range h.storage.Counter {
-				metric := model.Metrics{
-					ID:    id,
-					MType: "counter",
-					Delta: &value,
-				}
-				metricsBatch = append(metricsBatch, metric)
-			}
-			err := h.sendRequest(metricsBatch, &url, client, limiter)
-			if err != nil {
-				h.appLogger.Log.Info("request sending is failed", zap.String("error", err.Error()))
-			}
-			h.storage.Mutex.RUnlock()
+			h.SendMetricsHandler(client, limiter)
 		}
 	}
 }

@@ -3,13 +3,9 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-
-	"github.com/go-chi/chi/v5"
 
 	database "github.com/justEngineer/go-metrics-service/internal/database"
 	filedump "github.com/justEngineer/go-metrics-service/internal/filestorage"
@@ -36,16 +32,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
+
 	ServerHandler := server.New(MetricStorage, &cfg, appLogger, dbConnecton)
 
-	router := chi.NewRouter()
-	routing.SetMiddlewares(router, appLogger, &cfg.SHA256Key, cfg.PrivateCryptoKey)
-	routing.SetRequestRouting(router, ServerHandler, cfg.PrivateCryptoKey)
-
-	port := strings.Split(cfg.Endpoint, ":")
-	log.Fatal(http.ListenAndServe(":"+port[1], router))
+	server := routing.ServerStart(appLogger, ServerHandler, &cfg)
 
 	signalChannel := make(chan os.Signal, 1)
-	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-signalChannel
+
+	log.Println("Shutting down the server...")
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server stopped.")
 }

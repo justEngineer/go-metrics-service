@@ -55,12 +55,15 @@ func (ert EncryptionMiddleware) RoundTrip(req *http.Request) (*http.Response, er
 		return ert.Proxied.RoundTrip(req)
 	}
 	body, err := io.ReadAll(req.Body)
+	defer req.Body.Close()
+
 	switch {
 	case errors.Is(err, io.EOF):
 		return ert.Proxied.RoundTrip(req)
 	case err != nil:
 		return nil, ErrCouldntReadBody
 	}
+
 	encryptedBody, err := RSAEncrypt(body, ert.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't encrypt body: %w", err)

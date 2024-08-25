@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -25,18 +26,24 @@ func main() {
 
 	ClientHandler := client.New(MetricStorage, &config, appLogger)
 
-	ctx, stop := signal.NotifyContext(context.Background(),
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 	)
+
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+
 	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		ClientHandler.GetMetrics(ctx)
-		stop()
 	}()
+
 	wg.Add(1)
 	requestLimiter := async.NewSemaphore(int(config.RateLimit))
 	go func() {
@@ -47,7 +54,12 @@ func main() {
 				PublicKey: config.PublicCryptoKey,
 			}}
 		ClientHandler.SendMetrics(ctx, &client, requestLimiter)
-		stop()
 	}()
+
+	<-signalChannel
+	log.Println("Shutting down the agent...")
+
+	stop()
 	wg.Wait()
+	log.Println("Agent stopped.")
 }
