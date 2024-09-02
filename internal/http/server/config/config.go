@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/justEngineer/go-metrics-service/internal/security"
+	"github.com/justEngineer/go-metrics-service/internal/encryption"
 )
 
 // ServerConfig содержит конфигурацию для сервера.
@@ -21,7 +21,8 @@ type ServerConfig struct {
 	DatabaseDSN      string          `json:"database_dsn"`   // Строка подключения к базе данных
 	SHA256Key        string          // Ключ для подписи данных
 	PrivateCryptoKey *rsa.PrivateKey // Ключ для шифрования данных
-	PrivateKeyPath   string          `json:"crypto_key"` // Путь к файлу Ключ для шифрования данных
+	PrivateKeyPath   string          `json:"crypto_key"`     // Путь к файлу Ключ для шифрования данных
+	TrustedSubnet    string          `yaml:"trusted_subnet"` //	Cтроковое представление бесклассовой адресации (CIDR)
 }
 
 func loadConfigFromFile(path string) (ServerConfig, error) {
@@ -38,7 +39,7 @@ func loadConfigFromFile(path string) (ServerConfig, error) {
 	}
 	if config.PrivateKeyPath != "" {
 		var err error
-		config.PrivateCryptoKey, err = security.GetPrivateKey(config.PrivateKeyPath)
+		config.PrivateCryptoKey, err = encryption.GetPrivateKey(config.PrivateKeyPath)
 		if err != nil {
 			log.Fatalf("RSA private key read error:%s", err)
 		}
@@ -61,6 +62,7 @@ func Parse() ServerConfig {
 	flag.StringVar(&cfg.SHA256Key, "k", "", "SHA256 key")
 	flag.StringVar(&privateKeyPath, "crypto-key", "", "path to the private encryption key")
 	flag.StringVar(&configFilePath, "c", "", "path to the configuration file")
+	flag.StringVar(&cfg.TrustedSubnet, "t", "", "Trusted subnet (CIDR)")
 	flag.Parse()
 	if res := os.Getenv("ADDRESS"); res != "" {
 		cfg.Endpoint = res
@@ -98,10 +100,13 @@ func Parse() ServerConfig {
 	}
 	if privateKeyPath != "" {
 		var err error
-		cfg.PrivateCryptoKey, err = security.GetPrivateKey(privateKeyPath)
+		cfg.PrivateCryptoKey, err = encryption.GetPrivateKey(privateKeyPath)
 		if err != nil {
 			log.Fatalf("RSA private key read error:%s", err)
 		}
+	}
+	if res := os.Getenv("TRUSTED_SUBNET"); res != "" {
+		cfg.TrustedSubnet = res
 	}
 
 	if configFileEnv := os.Getenv("CONFIG"); configFileEnv != "" {
