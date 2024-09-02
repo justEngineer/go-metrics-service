@@ -22,7 +22,7 @@ func Example() {
 	var cfg config.ServerConfig
 
 	cfg.Endpoint = "localhost:8080"
-	cfg.DBConnection = "postgresql://localhost/dbname"
+	cfg.DatabaseDSN = "postgresql://localhost/dbname"
 	dbConnecton, _ := database.NewConnection(ctx, &cfg)
 	appLogger, _ := logger.New(cfg.LogLevel)
 	MetricStorage := storage.New()
