@@ -10,9 +10,9 @@ import (
 	"syscall"
 
 	async "github.com/justEngineer/go-metrics-service/internal/async"
+	"github.com/justEngineer/go-metrics-service/internal/encryption"
 	client "github.com/justEngineer/go-metrics-service/internal/http/client"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
-	"github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
@@ -49,7 +49,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		client := http.Client{
-			Transport: security.EncryptionMiddleware{
+			Transport: encryption.EncryptionMiddleware{
 				Proxied:   http.DefaultTransport,
 				PublicKey: config.PublicCryptoKey,
 			}}
