@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	"github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 	"go.uber.org/zap"

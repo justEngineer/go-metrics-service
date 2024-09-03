@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	security "github.com/justEngineer/go-metrics-service/internal/security"
+	"github.com/justEngineer/go-metrics-service/internal/encryption"
 )
 
 type ClientConfig struct {
@@ -36,7 +36,7 @@ func loadConfigFromFile(path string) (ClientConfig, error) {
 	}
 	if config.PublicKeyPath != "" {
 		var err error
-		config.PublicCryptoKey, err = security.GetPublicKey(config.PublicKeyPath)
+		config.PublicCryptoKey, err = encryption.GetPublicKey(config.PublicKeyPath)
 		if err != nil {
 			log.Fatalf("RSA private key read error:%s", err)
 		}
@@ -93,7 +93,7 @@ func Parse() ClientConfig {
 	}
 	if publicKeyPath != "" {
 		var err error
-		cfg.PublicCryptoKey, err = security.GetPublicKey(publicKeyPath)
+		cfg.PublicCryptoKey, err = encryption.GetPublicKey(publicKeyPath)
 		if err != nil {
 			log.Fatalf("RSA public key read error:%s", err)
 		}

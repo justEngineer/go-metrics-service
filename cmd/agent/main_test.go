@@ -10,7 +10,8 @@ import (
 	"os/signal"
 	"time"
 
-	client "github.com/justEngineer/go-metrics-service/internal/http/client"
+	cfg "github.com/justEngineer/go-metrics-service/internal/handlers/client"
+	client "github.com/justEngineer/go-metrics-service/internal/handlers/client/http"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
@@ -19,7 +20,7 @@ import (
 
 func TestGetMetrics(t *testing.T) {
 	MetricStorage := storage.New()
-	config := client.Parse()
+	config := cfg.Parse()
 	appLogger, err := logger.New(config.LogLevel)
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)

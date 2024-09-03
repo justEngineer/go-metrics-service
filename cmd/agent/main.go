@@ -10,15 +10,16 @@ import (
 	"syscall"
 
 	async "github.com/justEngineer/go-metrics-service/internal/async"
-	client "github.com/justEngineer/go-metrics-service/internal/http/client"
+	"github.com/justEngineer/go-metrics-service/internal/encryption"
+	cfg "github.com/justEngineer/go-metrics-service/internal/handlers/client"
+	client "github.com/justEngineer/go-metrics-service/internal/handlers/client/http"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
-	"github.com/justEngineer/go-metrics-service/internal/security"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 func main() {
 	MetricStorage := storage.New()
-	config := client.Parse()
+	config := cfg.Parse()
 	appLogger, err := logger.New(config.LogLevel)
 	if err != nil {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
@@ -49,7 +50,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		client := http.Client{
-			Transport: security.EncryptionMiddleware{
+			Transport: encryption.EncryptionMiddleware{
 				Proxied:   http.DefaultTransport,
 				PublicKey: config.PublicCryptoKey,
 			}}

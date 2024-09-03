@@ -1,20 +1,23 @@
-package client
+package http
 
 import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"time"
 
 	"context"
 	"fmt"
+	"log"
 
 	"compress/gzip"
 
 	async "github.com/justEngineer/go-metrics-service/internal/async"
+	cfg "github.com/justEngineer/go-metrics-service/internal/handlers/client"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
 	security "github.com/justEngineer/go-metrics-service/internal/security"
@@ -26,13 +29,34 @@ import (
 
 type Handler struct {
 	storage   *storage.MemStorage
-	config    *ClientConfig
+	config    *cfg.ClientConfig
 	appLogger *logger.Logger
 	serverURL string
+	clientIP  string
 }
 
-func New(metricsService *storage.MemStorage, config *ClientConfig, appLogger *logger.Logger) *Handler {
-	return &Handler{metricsService, config, appLogger, "http://" + config.Endpoint + "/updates/"}
+func GetIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String(), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("error while getting IP address")
+}
+
+func New(metricsService *storage.MemStorage, config *cfg.ClientConfig, appLogger *logger.Logger) *Handler {
+	IPAddress, err := GetIP()
+	if err != nil {
+		log.Fatalf("Could get client IP address, error: %v\n", err)
+	}
+	return &Handler{metricsService, config, appLogger, "http://" + config.Endpoint + "/updates/", IPAddress}
 }
 
 func (h *Handler) GetMetrics(ctx context.Context) {
@@ -105,6 +129,7 @@ func (h *Handler) sendRequest(metric []model.Metrics, url *string, client *http.
 	request.Header.Add("Content-Type", "application/json")
 	request.Header.Set("Accept-Encoding", "gzip")
 	request.Header.Set("Content-Encoding", "gzip")
+	request.Header.Set("X-Real-IP", h.clientIP)
 	if h.config.SHA256Key != "" {
 		signedBody, err := security.AddSign(body, h.config.SHA256Key)
 		if err != nil {

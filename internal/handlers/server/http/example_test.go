@@ -8,9 +8,9 @@ import (
 	"time"
 
 	database "github.com/justEngineer/go-metrics-service/internal/database"
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	"github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
-	storage "github.com/justEngineer/go-metrics-service/internal/storage"
+	"github.com/justEngineer/go-metrics-service/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 )

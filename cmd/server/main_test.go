@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
-	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
+	config "github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
+	server "github.com/justEngineer/go-metrics-service/internal/handlers/server/http"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 
