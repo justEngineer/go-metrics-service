@@ -12,9 +12,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/justEngineer/go-metrics-service/internal/encryption"
 	compression "github.com/justEngineer/go-metrics-service/internal/gzip"
-	"github.com/justEngineer/go-metrics-service/internal/http/server/config"
-	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
-	profiler "github.com/justEngineer/go-metrics-service/internal/http/server/profiler"
+	"github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
+	server "github.com/justEngineer/go-metrics-service/internal/handlers/server/http"
+	profiler "github.com/justEngineer/go-metrics-service/internal/handlers/server/http/profiler"
 	"github.com/justEngineer/go-metrics-service/internal/logger"
 	"github.com/justEngineer/go-metrics-service/internal/security"
 )

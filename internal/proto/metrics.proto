@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package grpc_service;
+
+option go_package = "github.com/justEngineer/go-metrics-service/internal/proto";
+
+
+message Metric {
+  string ID = 1;
+  string MType = 2;
+  optional int64 Delta = 3;
+  optional double Value = 4;
+}
+
+
+// type Metrics struct {
+// 	ID    string   `json:"id"`              // имя метрики
+// 	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
+// 	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
+// 	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+// }
+
+message UpdateMetricsRequest {
+  repeated Metric metrics = 1;
+}
+
+message UpdateMetricResponse {
+  enum Status {
+    UNKNOWN = 0;
+    SUCCESS = 1;
+    FAILED = 2;
+  }
+  Status status = 1;
+  string error = 2;
+}
+
+service Metrics {
+  rpc UpdateMetrics (UpdateMetricsRequest) returns (UpdateMetricResponse) {}
+}

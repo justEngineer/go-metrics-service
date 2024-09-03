@@ -6,6 +6,15 @@ import (
 	"sync"
 )
 
+// Storage интерфейс определяет методы, которые должны быть реализованы для работы с метриками.
+type Storage interface {
+	GetGaugeMetric(ctx context.Context, key string) (float64, error)
+	GetCounterMetric(ctx context.Context, key string) (int64, error)
+	SetGaugeMetric(ctx context.Context, key string, value float64) error
+	SetCounterMetric(ctx context.Context, key string, value int64) error
+	SetMetricsBatch(ctx context.Context, gaugesBatch []GaugeMetric, countersBatch []CounterMetric) error
+}
+
 type GaugeMetric struct {
 	Name  string  `json:"name"`
 	Value float64 `json:"value"`

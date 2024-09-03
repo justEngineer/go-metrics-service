@@ -9,9 +9,10 @@ import (
 
 	database "github.com/justEngineer/go-metrics-service/internal/database"
 	filedump "github.com/justEngineer/go-metrics-service/internal/filestorage"
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
-	server "github.com/justEngineer/go-metrics-service/internal/http/server/handlers"
-	routing "github.com/justEngineer/go-metrics-service/internal/http/server/routing"
+	config "github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
+	grpc "github.com/justEngineer/go-metrics-service/internal/handlers/server/grpc"
+	server "github.com/justEngineer/go-metrics-service/internal/handlers/server/http"
+	"github.com/justEngineer/go-metrics-service/internal/handlers/server/http/routing"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	storage "github.com/justEngineer/go-metrics-service/internal/storage"
 )
@@ -33,8 +34,10 @@ func main() {
 		log.Fatalf("Logger wasn't initialized due to %s", err)
 	}
 
-	ServerHandler := server.New(MetricStorage, &cfg, appLogger, dbConnecton)
+	gRPCServer := grpc.NewMetricsServer(MetricStorage, appLogger)
+	gRPCServerHandler := gRPCServer.Start(ctx)
 
+	ServerHandler := server.New(MetricStorage, &cfg, appLogger, dbConnecton)
 	server := routing.ServerStart(appLogger, ServerHandler, &cfg)
 
 	signalChannel := make(chan os.Signal, 1)
@@ -45,6 +48,7 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+	gRPCServerHandler.GracefulStop()
 
 	log.Println("Server stopped.")
 }

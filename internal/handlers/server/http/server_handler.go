@@ -19,26 +19,17 @@ import (
 	"go.uber.org/zap"
 
 	database "github.com/justEngineer/go-metrics-service/internal/database"
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	config "github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	"github.com/justEngineer/go-metrics-service/internal/models"
-	storage "github.com/justEngineer/go-metrics-service/internal/storage"
+	"github.com/justEngineer/go-metrics-service/internal/storage"
 )
 
 //go:embed main_page_html.tmpl
 var mainPageTemplateFile string
 
-// Storage интерфейс определяет методы, которые должны быть реализованы для работы с метриками.
-type Storage interface {
-	GetGaugeMetric(ctx context.Context, key string) (float64, error)
-	GetCounterMetric(ctx context.Context, key string) (int64, error)
-	SetGaugeMetric(ctx context.Context, key string, value float64) error
-	SetCounterMetric(ctx context.Context, key string, value int64) error
-	SetMetricsBatch(ctx context.Context, gaugesBatch []storage.GaugeMetric, countersBatch []storage.CounterMetric) error
-}
-
 type Handler struct {
-	storage     Storage
+	storage     storage.Storage
 	config      *config.ServerConfig
 	appLogger   *logger.Logger
 	DatabaseDSN *database.Database

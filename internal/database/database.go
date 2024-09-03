@@ -17,7 +17,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	config "github.com/justEngineer/go-metrics-service/internal/http/server/config"
+	config "github.com/justEngineer/go-metrics-service/internal/handlers/server/config"
 	"github.com/justEngineer/go-metrics-service/internal/storage"
 )
 

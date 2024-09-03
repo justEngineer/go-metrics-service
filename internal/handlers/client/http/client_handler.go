@@ -1,4 +1,4 @@
-package client
+package http
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"compress/gzip"
 
 	async "github.com/justEngineer/go-metrics-service/internal/async"
+	cfg "github.com/justEngineer/go-metrics-service/internal/handlers/client"
 	logger "github.com/justEngineer/go-metrics-service/internal/logger"
 	model "github.com/justEngineer/go-metrics-service/internal/models"
 	security "github.com/justEngineer/go-metrics-service/internal/security"
@@ -28,7 +29,7 @@ import (
 
 type Handler struct {
 	storage   *storage.MemStorage
-	config    *ClientConfig
+	config    *cfg.ClientConfig
 	appLogger *logger.Logger
 	serverURL string
 	clientIP  string
@@ -50,7 +51,7 @@ func GetIP() (string, error) {
 	return "", fmt.Errorf("error while getting IP address")
 }
 
-func New(metricsService *storage.MemStorage, config *ClientConfig, appLogger *logger.Logger) *Handler {
+func New(metricsService *storage.MemStorage, config *cfg.ClientConfig, appLogger *logger.Logger) *Handler {
 	IPAddress, err := GetIP()
 	if err != nil {
 		log.Fatalf("Could get client IP address, error: %v\n", err)
